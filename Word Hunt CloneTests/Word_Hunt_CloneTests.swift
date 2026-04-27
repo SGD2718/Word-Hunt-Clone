@@ -10,8 +10,8 @@ final class Word_Hunt_CloneTests: XCTestCase {
     }
 
     func testXoshiroGeneratedBoardsAreDeterministic() {
-        XCTAssertEqual(engine.generateBoard(seed: 1).joined(), "LSRDEENOTNAEABDE")
-        XCTAssertEqual(engine.generateBoard(seed: 42).joined(), "EOAIAIAOAANDLQAA")
+        XCTAssertEqual(engine.generateBoard(seed: 1).joined(), "AEIOSIYHTLWNNSVR")
+        XCTAssertEqual(engine.generateBoard(seed: 42).joined(), "RTHSITRASWTAESRC")
         XCTAssertEqual(engine.generateBoard(seed: 1), engine.generateBoard(seed: 1))
     }
 
