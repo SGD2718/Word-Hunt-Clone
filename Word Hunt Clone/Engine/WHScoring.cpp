@@ -3,13 +3,12 @@
 namespace wh {
 
 int scoreForLength(std::size_t length) {
+    if (length < 3) return 0;
     switch (length) {
         case 3: return 100;
         case 4: return 400;
         case 5: return 800;
-        case 6: return 1400;
-        case 7: return 1800;
-        default: return length >= 8 ? 2200 : 0;
+        default: return 1400 + 400 * (static_cast<int>(length) - 6);
     }
 }
 
