@@ -324,26 +324,34 @@ private struct WordBoardView: View {
         let current = path.last
         var candidates: [(index: Int, score: CGFloat)] = []
 
+        enum HitShape { case square, circle, rhombus }
+
         for index in 0..<16 {
             let center = tileCenter(for: index, in: size)
             let dx = point.x - center.x
             let dy = point.y - center.y
-            let useCircle: Bool = {
-                guard let current else { return false }
-                if index == current { return false }
-                if pathSet.contains(index) { return true }
-                return isOrthogonal(index, current)
+            let ax = abs(dx)
+            let ay = abs(dy)
+            let shape: HitShape = {
+                guard let current else { return .square }
+                if index == current { return .square }
+                if pathSet.contains(index) { return .rhombus }
+                if isOrthogonal(index, current) { return .circle }
+                return .square
             }()
-            if useCircle {
+            switch shape {
+            case .square:
+                if ax <= half && ay <= half {
+                    candidates.append((index, max(ax, ay) / half))
+                }
+            case .circle:
                 let dist2 = dx * dx + dy * dy
                 if dist2 <= half * half {
                     candidates.append((index, sqrt(dist2) / half))
                 }
-            } else {
-                let ax = abs(dx)
-                let ay = abs(dy)
-                if ax <= half && ay <= half {
-                    candidates.append((index, max(ax, ay) / half))
+            case .rhombus:
+                if ax + ay <= half {
+                    candidates.append((index, (ax + ay) / half))
                 }
             }
         }
