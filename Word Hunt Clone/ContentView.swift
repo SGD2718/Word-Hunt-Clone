@@ -21,7 +21,7 @@ struct ContentView: View {
                         .padding(.top, 2)
                     
                     WordBoardView(game: game)
-                        .frame(maxWidth: 430)
+                        .frame(maxWidth: 360)
                         .aspectRatio(1, contentMode: .fit)
                         .padding(.horizontal, 10)
                         .padding(.top, 6)
@@ -304,25 +304,44 @@ private struct WordBoardView: View {
 
     private func tileIndex(at point: CGPoint, in size: CGSize) -> Int? {
         let length = tileLength(in: size)
-        let diamondRadius = length / 2
+        let half = length / 2
+        let path = game.selectedPath
+        let pathSet = Set(path)
+        let current = path.last
         var candidates: [(index: Int, score: CGFloat)] = []
 
         for index in 0..<16 {
             let center = tileCenter(for: index, in: size)
-            let score = diamondScore(point: point, center: center, radius: diamondRadius)
-            if score <= 1 {
-                candidates.append((index, score))
+            let dx = point.x - center.x
+            let dy = point.y - center.y
+            let useCircle: Bool = {
+                guard let current else { return false }
+                if index == current { return false }
+                if pathSet.contains(index) { return true }
+                return isOrthogonal(index, current)
+            }()
+            if useCircle {
+                let dist2 = dx * dx + dy * dy
+                if dist2 <= half * half {
+                    candidates.append((index, sqrt(dist2) / half))
+                }
+            } else {
+                let ax = abs(dx)
+                let ay = abs(dy)
+                if ax <= half && ay <= half {
+                    candidates.append((index, max(ax, ay) / half))
+                }
             }
         }
 
         guard !candidates.isEmpty else { return nil }
 
-        if let last = game.selectedPath.last {
+        if let last = current {
             let lastCenter = tileCenter(for: last, in: size)
             let dragVector = CGPoint(x: point.x - lastCenter.x, y: point.y - lastCenter.y)
             let adjacentUnselected = candidates.filter { candidate in
                 candidate.index != last &&
-                !game.selectedPath.contains(candidate.index) &&
+                !pathSet.contains(candidate.index) &&
                 isAdjacent(last, candidate.index)
             }
 
@@ -335,10 +354,6 @@ private struct WordBoardView: View {
         }
 
         return candidates.min(by: { $0.score < $1.score })?.index
-    }
-
-    private func diamondScore(point: CGPoint, center: CGPoint, radius: CGFloat) -> CGFloat {
-        (abs(point.x - center.x) + abs(point.y - center.y)) / radius
     }
 
     private func directionalScore(from start: Int, to destination: Int, dragVector: CGPoint, in size: CGSize) -> CGFloat {
@@ -354,6 +369,14 @@ private struct WordBoardView: View {
         let rightRow = rhs / 4
         let rightColumn = rhs % 4
         return abs(leftRow - rightRow) <= 1 && abs(leftColumn - rightColumn) <= 1
+    }
+
+    private func isOrthogonal(_ lhs: Int, _ rhs: Int) -> Bool {
+        let leftRow = lhs / 4
+        let leftColumn = lhs % 4
+        let rightRow = rhs / 4
+        let rightColumn = rhs % 4
+        return abs(leftRow - rightRow) + abs(leftColumn - rightColumn) == 1
     }
 
     private func handleDragChange(to location: CGPoint, in size: CGSize) {
