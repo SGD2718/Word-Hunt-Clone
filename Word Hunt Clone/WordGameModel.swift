@@ -45,10 +45,15 @@ final class WordGameModel: ObservableObject {
     @Published private(set) var solvedWords: [WHWordResult] = []
     @Published private(set) var isSolving = false
     @Published private(set) var isDictionaryLoaded = false
+    @Published private(set) var isGeneratingBoard = false
     @Published private(set) var scorePulse = 0
     @Published private(set) var boardPulse = 0
     @Published var showingSolver = false
     @Published var showingAbout = false
+
+    private var currentBoardMetrics: WHGoodBoard?
+    private var roundStartedAt: Date?
+    private var metricsLoggedForRound = false
 
     var isRoundOver: Bool {
         remainingSeconds <= 0
@@ -83,12 +88,10 @@ final class WordGameModel: ObservableObject {
     }
 
     func startNewGame(seed requestedSeed: UInt64? = nil) {
+        guard !isGeneratingBoard else { return }
         let nextSeed = requestedSeed ?? UInt64(Date().timeIntervalSince1970 * 1000)
         seed = nextSeed
-        roundEndsAt = Date().addingTimeInterval(TimeInterval(roundLength))
-        board = engine.generateBoard(seed: nextSeed)
         score = 0
-        remainingSeconds = roundLength
         foundWords = []
         foundWordSet = []
         selectedPath = []
@@ -96,8 +99,26 @@ final class WordGameModel: ObservableObject {
         isSolving = false
         showingSolver = false
         submissionState = isDictionaryLoaded ? .idle : submissionState
-        boardPulse += 1
-        rigidImpact.impactOccurred(intensity: 0.7)
+        currentBoardMetrics = nil
+        metricsLoggedForRound = false
+        isGeneratingBoard = true
+        remainingSeconds = roundLength
+
+        let engineRef = engine
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = engineRef.generateGoodBoard(seed: nextSeed)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.board = result.letters
+                self.currentBoardMetrics = result
+                self.isGeneratingBoard = false
+                self.roundEndsAt = Date().addingTimeInterval(TimeInterval(self.roundLength))
+                self.roundStartedAt = Date()
+                self.remainingSeconds = self.roundLength
+                self.boardPulse += 1
+                self.rigidImpact.impactOccurred(intensity: 0.7)
+            }
+        }
     }
 
     func tick() {
@@ -105,6 +126,7 @@ final class WordGameModel: ObservableObject {
     }
 
     func refreshClock(now: Date = Date()) {
+        guard !isGeneratingBoard else { return }
         let nextRemaining = max(0, Int(ceil(roundEndsAt.timeIntervalSince(now))))
         guard nextRemaining != remainingSeconds else { return }
 
@@ -187,6 +209,40 @@ final class WordGameModel: ObservableObject {
         isSolving = false
         showingSolver = true
         softImpact.impactOccurred(intensity: 0.9)
+        logRoundMetrics()
+    }
+
+    private func logRoundMetrics() {
+        guard !metricsLoggedForRound, let metrics = currentBoardMetrics else { return }
+        metricsLoggedForRound = true
+
+        let longest = foundWords.map(\.count).max() ?? 0
+        let duration: Int = {
+            guard let started = roundStartedAt else { return roundLength }
+            return Int(Date().timeIntervalSince(started).rounded())
+        }()
+
+        var subscores: [String: Double] = [:]
+        for (k, v) in metrics.subscores {
+            subscores[k] = v.doubleValue
+        }
+
+        let row = BoardRoundMetrics(
+            seed: seed,
+            board: board.joined(),
+            heuristicScore: metrics.heuristicScore,
+            subscores: subscores,
+            candidatesEvaluated: Int(metrics.candidatesEvaluated),
+            hillClimbAccepted: Int(metrics.hillClimbAccepted),
+            solverMaxScore: metrics.solverMaxScore,
+            solverWordCount: metrics.solverWordCount,
+            playerScore: score,
+            playerWordCount: foundWords.count,
+            playerLongestWord: longest,
+            roundDurationSec: duration,
+            timestamp: Date()
+        )
+        BoardMetricsLogger.shared.append(row)
     }
 
     func forceEndRound() {

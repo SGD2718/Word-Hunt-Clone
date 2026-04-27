@@ -259,9 +259,23 @@ private struct WordBoardView: View {
 
                 SelectionPathView(path: game.selectedPath.map { tileCenter(for: $0, in: size) }, lineWidth: length * 0.17)
                     .allowsHitTesting(false)
+
+                if game.isGeneratingBoard {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.black.opacity(0.45))
+                    VStack(spacing: 10) {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                        Text("Building board…")
+                            .font(.system(size: 14, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white)
+                    }
+                }
             }
             .padding(4)
             .contentShape(Rectangle())
+            .allowsHitTesting(!game.isGeneratingBoard)
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
