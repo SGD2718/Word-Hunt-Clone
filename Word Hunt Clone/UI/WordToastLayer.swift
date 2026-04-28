@@ -5,14 +5,14 @@ struct WordToastLayer: View {
 
     var body: some View {
         ZStack {
-            if !game.selectedPath.isEmpty {
-                WordChip(text: game.currentWord, status: game.liveStatus, score: liveScore)
-                    .id("live")
-            }
-
             ForEach(game.releasedToasts) { toast in
                 ReleasedToastView(toast: toast)
                     .id(toast.id)
+            }
+
+            if !game.selectedPath.isEmpty {
+                WordChip(text: game.currentWord, status: game.liveStatus, score: liveScore)
+                    .id("live")
             }
         }
         .frame(maxWidth: .infinity)
