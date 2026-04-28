@@ -57,6 +57,35 @@ final class Word_Hunt_CloneTests: XCTestCase {
         XCTAssertFalse(engine.contains(word: "NOT_A_WORD"))
     }
 
+    func testGoodBoardGeneratorIsDeterministicAndSensible() throws {
+        try engine.loadBundledDictionary()
+        let a = engine.generateGoodBoard(seed: 7)
+        let b = engine.generateGoodBoard(seed: 7)
+        XCTAssertEqual(a.letters, b.letters)
+        XCTAssertEqual(a.letters.count, 16)
+        for letter in a.letters {
+            XCTAssertEqual(letter.count, 1)
+            XCTAssertTrue(letter.unicodeScalars.first.map { CharacterSet.uppercaseLetters.contains($0) } ?? false)
+        }
+        XCTAssertGreaterThan(a.solverWordCount, 30, "Good board should be findable-rich")
+        XCTAssertNotNil(a.subscores["n3"])
+    }
+
+    func testGoodBoardBeatsClassicOnFindableWordCount() throws {
+        try engine.loadBundledDictionary()
+        var goodTotal = 0
+        var classicTotal = 0
+        let seeds: [UInt64] = [11, 23, 47, 91, 142]
+        for s in seeds {
+            goodTotal += engine.generateGoodBoard(seed: s).solverWordCount
+            classicTotal += engine.solve(board: engine.generateBoard(seed: s)).count
+        }
+        let goodAvg = Double(goodTotal) / Double(seeds.count)
+        let classicAvg = Double(classicTotal) / Double(seeds.count)
+        XCTAssertGreaterThan(goodAvg, classicAvg,
+            "Good boards should average more findable words than classic dice (\(goodAvg) vs \(classicAvg))")
+    }
+
     func testSolverPerformanceSmokeTest() throws {
         try engine.loadBundledDictionary()
         let boards = (0..<100).map { engine.generateBoard(seed: UInt64($0)) }
