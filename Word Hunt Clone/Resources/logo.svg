@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FCEBB0"/>
+      <stop offset="1" stop-color="#EDD194"/>
+    </linearGradient>
+    <linearGradient id="lit" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F4F4EE"/>
+    </linearGradient>
+    <filter id="ts" x="-12%" y="-12%" width="124%" height="124%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#739E66"/>
+  <rect x="60" y="60" width="904" height="904" rx="100"
+        fill="#487348" stroke="#9ECC8C" stroke-width="16"/>
+
+  <!--
+    Layout (selected tiles white, wood tiles cream):
+      row 0: [W] [O] [R] [D]
+      row 1:  A   E  [H] [U]
+      row 2:  S   L   K  [N]
+      row 3:  I   M   P  [T]
+
+    Continuous swipe (all single-step adjacencies):
+      W -> O -> R -> D    (row 0 left-to-right)
+      D -> H              (diagonal down-left, one cell - "new word" connector)
+      H -> U              (left-to-right)
+      U -> N -> T         (top-to-bottom)
+    No leftward or upward motion within either word.
+  -->
+  <g filter="url(#ts)">
+    <!-- ROW 0 -->
+    <g transform="translate(196 196)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#lit)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">W</text></g>
+    <g transform="translate(406 196)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#lit)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">O</text></g>
+    <g transform="translate(616 196)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#lit)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">R</text></g>
+    <g transform="translate(826 196)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#lit)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">D</text></g>
+
+    <!-- ROW 1 -->
+    <g transform="translate(196 406)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#wood)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">A</text></g>
+    <g transform="translate(406 406)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#wood)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">E</text></g>
+    <g transform="translate(616 406)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#lit)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">H</text></g>
+    <g transform="translate(826 406)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#lit)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">U</text></g>
+
+    <!-- ROW 2 -->
+    <g transform="translate(196 616)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#wood)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">S</text></g>
+    <g transform="translate(406 616)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#wood)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">L</text></g>
+    <g transform="translate(616 616)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#wood)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">K</text></g>
+    <g transform="translate(826 616)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#lit)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">N</text></g>
+
+    <!-- ROW 3 -->
+    <g transform="translate(196 826)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#wood)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">I</text></g>
+    <g transform="translate(406 826)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#wood)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">M</text></g>
+    <g transform="translate(616 826)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#wood)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">P</text></g>
+    <g transform="translate(826 826)"><rect x="-96" y="-96" width="192" height="192" rx="24" fill="url(#lit)"/><text x="0" y="42" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="900" font-size="120" fill="#21201A">T</text></g>
+  </g>
+
+  <!-- Continuous swipe stroke. WORDHUNT not real, so red ("invalid"). -->
+  <polyline points="196,196 406,196 616,196 826,196 616,406 826,406 826,616 826,826"
+            stroke="#F2453B" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"
+            fill="none" opacity="0.55"/>
+</svg>

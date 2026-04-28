@@ -5,7 +5,7 @@ struct StartOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.45)
+            GameColors.boardBackground
                 .ignoresSafeArea()
 
             VStack(spacing: 20) {
@@ -27,20 +27,16 @@ struct StartOverlay: View {
                 } label: {
                     Text("Start")
                         .font(.system(size: 22, weight: .black, design: .rounded))
-                        .foregroundStyle(GameColors.ink)
+                        .foregroundStyle(.black)
                         .frame(minWidth: 180)
                         .padding(.vertical, 14)
-                        .background(GameColors.validNew, in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
                         .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 3)
                 }
                 .disabled(game.isGeneratingBoard)
                 .opacity(game.isGeneratingBoard ? 0.6 : 1)
             }
             .padding(28)
-            .background(
-                RoundedRectangle(cornerRadius: 22)
-                    .fill(GameColors.boardInner.opacity(0.95))
-            )
             .padding(.horizontal, 30)
         }
     }
