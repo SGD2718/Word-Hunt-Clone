@@ -71,10 +71,11 @@ final class Word_Hunt_CloneTests: XCTestCase {
         XCTAssertGreaterThan(Int(a.heuristicScore), 0, "Overlap heuristic should be positive on a populated board")
     }
 
-    func testOverlapHeuristicCountsSharedCellsSquared() {
-        // Diagonal: 3² + 4² = 25. Off-diagonal: shared 3 cells appears
-        // twice in the full matrix (M[CAT][CATS] + M[CATS][CAT]) = 2·9 = 18.
-        // Total = 43.
+    func testHeuristicScoresTileSubpathCubedOverMinLen() {
+        // CAT path = [0,1,5], CATS path = [0,1,5,6]. Longest contiguous
+        // shared cell subsequence = [0,1,5] of length 3. min_len = 3.
+        // Pair contribution per matrix entry = 3³/3 = 9; full-matrix sum
+        // doubles it = 18. Diagonal: 3² + 4² = 25. Total = 43.
         engine.loadWordsForTesting(["CAT", "CATS"])
         let board = [
             "C", "A", "X", "X",
@@ -86,14 +87,29 @@ final class Word_Hunt_CloneTests: XCTestCase {
     }
 
     func testOverlapHeuristicDisjointWordsHaveOnlyDiagonal() {
-        // CAT and DOG share no cells; off-diagonal is 0.
-        // Diagonal: 3² + 3² = 18.
+        // CAT and DOG share no cells; tile-LCS = 0. Diagonal: 3² + 3² = 18.
         engine.loadWordsForTesting(["CAT", "DOG"])
         let board = [
             "C", "A", "X", "X",
             "X", "T", "X", "X",
             "X", "X", "D", "O",
             "X", "X", "X", "G"
+        ]
+        XCTAssertEqual(engine.overlapHeuristicScore(board: board), 18)
+    }
+
+    func testTileSequenceDistinguishesFromCellSetOverlap() {
+        // RAT and TAR cover the same three cells {0,1,2} but in opposite
+        // order. Cell-SET overlap would be 3 (the old heuristic would
+        // score this pair); tile-SEQUENCE LCS is only 1 (a single cell
+        // matches at any aligned position), which falls below the
+        // kMinSubpath threshold and contributes 0. Diagonal: 3² + 3² = 18.
+        engine.loadWordsForTesting(["RAT", "TAR"])
+        let board = [
+            "R", "A", "T", "X",
+            "X", "X", "X", "X",
+            "X", "X", "X", "X",
+            "X", "X", "X", "X"
         ]
         XCTAssertEqual(engine.overlapHeuristicScore(board: board), 18)
     }
