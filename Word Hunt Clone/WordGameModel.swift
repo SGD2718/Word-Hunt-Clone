@@ -26,8 +26,8 @@ final class WordGameModel: ObservableObject {
     let roundLength = 80
 
     private let engine: WHWordHuntEngine
-    private let pressFeedback = UIImpactFeedbackGenerator(style: .light)
-    private let releaseFeedback = UIImpactFeedbackGenerator(style: .medium)
+    private let pressFeedback = UIImpactFeedbackGenerator(style: .medium)
+    private let releaseFeedback = UIImpactFeedbackGenerator(style: .heavy)
     private let softImpact = UIImpactFeedbackGenerator(style: .soft)
     private var roundEndsAt = Date()
     private var lastHapticStatus: LiveStatus = .empty
@@ -164,7 +164,7 @@ final class WordGameModel: ObservableObject {
 
         let status = liveStatus
         if status == .acceptedNew && lastHapticStatus != .acceptedNew {
-            pressFeedback.impactOccurred(intensity: 0.85)
+            pressFeedback.impactOccurred(intensity: 1.0)
             pressFeedback.prepare()
         }
         lastHapticStatus = status

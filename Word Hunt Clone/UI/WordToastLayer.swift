@@ -41,7 +41,7 @@ struct ReleasedToastView: View {
     }
 
     private var scale: CGFloat {
-        let target: CGFloat = toast.status == .acceptedNew ? 1.5 : 1.0
+        let target: CGFloat = toast.status == .acceptedNew ? 1.25 : 1.0
         return 1 + (target - 1) * phase
     }
 }
