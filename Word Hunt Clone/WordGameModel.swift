@@ -228,19 +228,12 @@ final class WordGameModel: ObservableObject {
             return Int(Date().timeIntervalSince(started).rounded())
         }()
 
-        var subscores: [String: Double] = [:]
-        for (k, v) in metrics.subscores {
-            subscores[k] = v.doubleValue
-        }
-
         let row = BoardRoundMetrics(
             seed: seed,
             board: board.joined(),
             heuristicScore: metrics.heuristicScore,
-            subscores: subscores,
             candidatesEvaluated: Int(metrics.candidatesEvaluated),
             hillClimbAccepted: Int(metrics.hillClimbAccepted),
-            solverMaxScore: metrics.solverMaxScore,
             solverWordCount: metrics.solverWordCount,
             playerScore: score,
             playerWordCount: foundWords.count,

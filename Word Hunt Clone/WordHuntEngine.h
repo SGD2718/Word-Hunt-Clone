@@ -31,11 +31,9 @@ NS_ASSUME_NONNULL_BEGIN
 @interface WHGoodBoard : NSObject
 
 @property (nonatomic, readonly) NSArray<NSString *> *letters;
-@property (nonatomic, readonly) double heuristicScore;
-@property (nonatomic, readonly) NSDictionary<NSString *, NSNumber *> *subscores;
+@property (nonatomic, readonly) int64_t heuristicScore;
 @property (nonatomic, readonly) NSUInteger candidatesEvaluated;
 @property (nonatomic, readonly) NSUInteger hillClimbAccepted;
-@property (nonatomic, readonly) NSInteger solverMaxScore;
 @property (nonatomic, readonly) NSInteger solverWordCount;
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -53,6 +51,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)loadWordsForTesting:(NSArray<NSString *> *)words NS_SWIFT_NAME(loadWordsForTesting(_:));
 - (NSArray<NSString *> *)generateBoardWithSeed:(uint64_t)seed NS_SWIFT_NAME(generateBoard(seed:));
 - (WHGoodBoard *)generateGoodBoardWithSeed:(uint64_t)seed NS_SWIFT_NAME(generateGoodBoard(seed:));
+- (int64_t)overlapHeuristicScoreForBoard:(NSArray<NSString *> *)board NS_SWIFT_NAME(overlapHeuristicScore(board:));
 - (NSArray<WHWordResult *> *)solveBoard:(NSArray<NSString *> *)board NS_SWIFT_NAME(solve(board:));
 - (BOOL)isValidPathForBoard:(NSArray<NSString *> *)board path:(NSArray<NSNumber *> *)path NS_SWIFT_NAME(isValidPath(board:path:));
 - (BOOL)containsWord:(NSString *)word NS_SWIFT_NAME(contains(word:));

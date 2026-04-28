@@ -2,9 +2,8 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstdint>
-#include <numeric>
+#include <utility>
 #include <vector>
 
 #include "WHRng.hpp"
@@ -24,12 +23,6 @@ constexpr int letterIdx(char c) { return c - 'A'; }
 bool isVowelLetter(uint8_t letter) {
     return letter == letterIdx('A') || letter == letterIdx('E') || letter == letterIdx('I')
         || letter == letterIdx('O') || letter == letterIdx('U');
-}
-
-int quadrantOf(int cell) {
-    int row = cell / kSide;
-    int col = cell % kSide;
-    return (row / 2) * 2 + (col / 2);
 }
 
 struct WeightedLetter {
@@ -104,7 +97,6 @@ std::array<char, kBoardSize> generateCandidate(Xoshiro256StarStar &rng) {
         drawn[letterIdx(c)]++;
     }
 
-    // Q -> U pairing: if Q drawn and no U vowel, swap one non-U vowel for U.
     bool hasQ = std::find(consonants.begin(), consonants.end(), 'Q') != consonants.end();
     bool hasU = std::find(vowels.begin(), vowels.end(), 'U') != vowels.end();
     if (hasQ && !hasU) {
@@ -118,9 +110,6 @@ std::array<char, kBoardSize> generateCandidate(Xoshiro256StarStar &rng) {
         }
     }
 
-    // Quadrant-stratified placement: distribute vowels round-robin across 4
-    // quadrants of 4 cells, fill remaining slots with consonants, then shuffle
-    // within each quadrant.
     std::array<std::vector<char>, 4> quadrants;
     for (auto &q : quadrants) q.reserve(4);
 
@@ -135,7 +124,6 @@ std::array<char, kBoardSize> generateCandidate(Xoshiro256StarStar &rng) {
         quadrants[qIndex].push_back(c);
         qIndex = (qIndex + 1) % 4;
     }
-    // Top up any quadrant under 4 (rare edge case if vowels piled).
     for (auto &q : quadrants) {
         while (q.size() < 4) {
             q.push_back('E');
@@ -150,7 +138,6 @@ std::array<char, kBoardSize> generateCandidate(Xoshiro256StarStar &rng) {
     }
 
     std::array<char, kBoardSize> board{};
-    // Quadrant cell layouts (row, col) for each 2x2 block in row-major order:
     static constexpr int kQuadCells[4][4] = {
         {0, 1, 4, 5},
         {2, 3, 6, 7},
@@ -183,15 +170,12 @@ bool prefilter(const std::array<char, kBoardSize> &board) {
         if (c == 'U') hasU = true;
     }
 
-    // Vowel count window.
     if (vowelCells < 4 || vowelCells > 7) return false;
 
-    // Letter count cap.
     for (int x : counts) {
         if (x >= 4) return false;
     }
 
-    // Q must have U within 2 hops.
     if (qCell >= 0) {
         if (!hasU) return false;
         uint16_t reach = adj[qCell];
@@ -213,7 +197,6 @@ bool prefilter(const std::array<char, kBoardSize> &board) {
         if (!found) return false;
     }
 
-    // Rare letters need a vowel neighbor.
     for (int i = 0; i < kBoardSize; ++i) {
         char c = board[i];
         if (c != 'J' && c != 'X' && c != 'Z' && c != 'V') continue;
@@ -227,7 +210,6 @@ bool prefilter(const std::array<char, kBoardSize> &board) {
         if (!ok) return false;
     }
 
-    // Largest connected consonant-only component <= 9.
     std::array<bool, kBoardSize> visited{};
     int largest = 0;
     for (int i = 0; i < kBoardSize; ++i) {
@@ -257,131 +239,143 @@ bool prefilter(const std::array<char, kBoardSize> &board) {
     return true;
 }
 
-constexpr std::array<std::pair<char, char>, 16> kCommonBigrams = {{
-    {'T','H'}, {'E','R'}, {'I','N'}, {'O','N'}, {'A','N'}, {'R','E'},
-    {'E','D'}, {'E','S'}, {'S','T'}, {'E','N'}, {'A','T'}, {'N','D'},
-    {'O','R'}, {'N','G'}, {'I','T'}, {'L','E'}
-}};
+// Reusable storage for path enumeration. `paths` is sized to
+// trie.wordCount() once, then reused across all candidates;
+// inner vector capacities persist between rounds. `dirty` tracks
+// which wordIDs got entries this round so we only clear those
+// (and only iterate those in the score pass) instead of touching
+// the whole 190k-element outer vector.
+struct PathBuffer {
+    std::vector<std::vector<uint16_t>> paths;
+    std::vector<uint32_t> dirty;
 
-int countAdjacentBigrams(const std::array<char, kBoardSize> &board) {
+    void resetForTrie(std::size_t wordCount) {
+        if (paths.size() != wordCount) {
+            paths.assign(wordCount, {});
+            dirty.clear();
+        }
+    }
+
+    void beginRound() {
+        for (uint32_t id : dirty) paths[id].clear();
+        dirty.clear();
+    }
+};
+
+void enumerateDfs(const std::array<uint8_t, kBoardSize> &board,
+                  const Trie &trie,
+                  uint32_t nodeIndex,
+                  int cell,
+                  uint16_t visited,
+                  PathBuffer &buf) {
+    const TrieNode &node = trie.nodes()[nodeIndex];
+    if (node.terminal != kNoWord) {
+        auto &v = buf.paths[node.terminal];
+        if (v.empty()) buf.dirty.push_back(node.terminal);
+        v.push_back(visited);
+    }
+
     const auto &adj = adjacencyMasks();
-    int count = 0;
-    for (int i = 0; i < kBoardSize; ++i) {
-        uint16_t s = adj[i] & static_cast<uint16_t>(~((1u << (i + 1)) - 1)); // j > i to avoid double-counting
-        while (s) {
-            int j = __builtin_ctz(s);
-            s &= s - 1;
-            char a = board[i], b = board[j];
-            for (const auto &bg : kCommonBigrams) {
-                if ((bg.first == a && bg.second == b) || (bg.first == b && bg.second == a)) {
-                    count++;
-                    break;
+    uint16_t candidates = static_cast<uint16_t>(adj[cell] & ~visited);
+    while (candidates != 0) {
+        uint16_t bit = static_cast<uint16_t>(candidates & -candidates);
+        int nextCell = __builtin_ctz(candidates);
+        candidates &= static_cast<uint16_t>(candidates - 1);
+
+        int32_t nextNode = trie.child(nodeIndex, board[nextCell]);
+        if (nextNode >= 0) {
+            enumerateDfs(board, trie,
+                         static_cast<uint32_t>(nextNode),
+                         nextCell,
+                         static_cast<uint16_t>(visited | bit),
+                         buf);
+        }
+    }
+}
+
+void enumerateAllPathMasks(const std::array<uint8_t, kBoardSize> &board,
+                           const Trie &trie,
+                           PathBuffer &buf) {
+    if (trie.empty()) return;
+    buf.resetForTrie(trie.wordCount());
+    buf.beginRound();
+
+    for (int cell = 0; cell < kBoardSize; ++cell) {
+        int32_t node = trie.child(0, board[cell]);
+        if (node >= 0) {
+            enumerateDfs(board, trie,
+                         static_cast<uint32_t>(node),
+                         cell,
+                         static_cast<uint16_t>(1u << cell),
+                         buf);
+        }
+    }
+
+    // Dedupe identical cell-set masks per word (different traversal orders
+    // collapse to one entry).
+    for (uint32_t id : buf.dirty) {
+        auto &v = buf.paths[id];
+        if (v.size() < 2) continue;
+        std::sort(v.begin(), v.end());
+        v.erase(std::unique(v.begin(), v.end()), v.end());
+    }
+}
+
+int64_t computeOverlapScore(const PathBuffer &buf, const Trie &trie) {
+    struct Entry {
+        const std::vector<uint16_t> *paths;
+        uint16_t unionMask;  // OR of all path masks; upper-bound filter for pair overlap
+        int length;
+    };
+    std::vector<Entry> wordPaths;
+    wordPaths.reserve(buf.dirty.size());
+    for (uint32_t id : buf.dirty) {
+        const auto &paths = buf.paths[id];
+        uint16_t u = 0;
+        for (uint16_t p : paths) u |= p;
+        wordPaths.push_back({&paths, u, static_cast<int>(trie.word(id).size())});
+    }
+
+    int64_t sum = 0;
+    // Score = Σ_i Σ_j o²(i,j). Diagonal: o(i,i)² = length(i)².
+    // Off-diagonal pairs appear twice in the full matrix (M[i][j] and
+    // M[j][i]), so each unordered pair contributes 2·o².
+    //
+    // Two filters cut the path-pair work substantially:
+    //   - pair-union: if (unionMask_i & unionMask_j) == 0, no path pair
+    //     can overlap → skip the pair entirely.
+    //   - per-path bound: popcount(a & unionMask_j) caps what path `a`
+    //     can ever score against any path of j; if ≤ best, skip the b loop.
+    //   - max-possible: popcount(pair-union) caps the pair; once `best`
+    //     reaches it, we can stop early.
+    for (std::size_t i = 0; i < wordPaths.size(); ++i) {
+        sum += static_cast<int64_t>(wordPaths[i].length) * wordPaths[i].length;
+        const auto &pi = *wordPaths[i].paths;
+        const uint16_t unionI = wordPaths[i].unionMask;
+        for (std::size_t j = i + 1; j < wordPaths.size(); ++j) {
+            const uint16_t unionJ = wordPaths[j].unionMask;
+            uint16_t pairUnion = static_cast<uint16_t>(unionI & unionJ);
+            if (pairUnion == 0) continue;
+            int maxPossible = __builtin_popcount(static_cast<uint32_t>(pairUnion));
+
+            const auto &pj = *wordPaths[j].paths;
+            int best = 0;
+            for (uint16_t a : pi) {
+                if (best == maxPossible) break;
+                int aBound = __builtin_popcount(static_cast<uint32_t>(a & unionJ));
+                if (aBound <= best) continue;
+                for (uint16_t b : pj) {
+                    int overlap = __builtin_popcount(static_cast<uint32_t>(a & b));
+                    if (overlap > best) {
+                        best = overlap;
+                        if (best == maxPossible) break;
+                    }
                 }
             }
+            sum += static_cast<int64_t>(2) * best * best;
         }
     }
-    return count;
-}
-
-void analyzePaths(const std::vector<SolverHit> &hits,
-                  BoardSubscores &out) {
-    int total = static_cast<int>(hits.size());
-    out.total = total;
-    int n3 = 0, n4 = 0, n5 = 0, n6plus = 0;
-    int straight = 0;
-    int longest = 0;
-    long lengthSum = 0;
-    int maxScore = 0;
-    std::array<int, 4> turnHist{};
-    for (const auto &h : hits) {
-        int len = h.length;
-        lengthSum += len;
-        if (len > longest) longest = len;
-        if (len == 3) n3++;
-        else if (len == 4) n4++;
-        else if (len == 5) n5++;
-        else n6plus++;
-        maxScore += h.score;
-
-        int turns = 0;
-        int prevDr = 99, prevDc = 99;
-        for (int i = 1; i < len; ++i) {
-            int a = h.path[i - 1], b = h.path[i];
-            int dr = (b / kSide) - (a / kSide);
-            int dc = (b % kSide) - (a % kSide);
-            if (i > 1 && (dr != prevDr || dc != prevDc)) turns++;
-            prevDr = dr;
-            prevDc = dc;
-        }
-        if (turns <= 1) straight++;
-        if (turns >= 3) turnHist[3]++;
-        else turnHist[turns]++;
-    }
-    out.n3 = n3;
-    out.n4 = n4;
-    out.n5 = n5;
-    out.n6plus = n6plus;
-    out.straightBonus = straight;
-    out.longestWord = longest;
-    out.meanWordLength = total > 0 ? static_cast<double>(lengthSum) / total : 0.0;
-    out.solverMaxScore = maxScore;
-    out.solverWordCount = total;
-    out.turnHistogram = turnHist;
-}
-
-double computeScore(const std::array<char, kBoardSize> &board,
-                    const std::vector<SolverHit> &hits,
-                    BoardSubscores &out) {
-    out = BoardSubscores{};
-    for (int i = 0; i < kBoardSize; ++i) {
-        out.letterCounts[letterIdx(board[i])]++;
-        if (isVowelLetter(static_cast<uint8_t>(letterIdx(board[i])))) {
-            out.vowelsPerQuadrant[quadrantOf(i)]++;
-        }
-    }
-    analyzePaths(hits, out);
-    out.bigramBonus = countAdjacentBigrams(board);
-
-    double mean = 0.0;
-    for (int v : out.vowelsPerQuadrant) mean += v;
-    mean /= 4.0;
-    double var = 0.0;
-    for (int v : out.vowelsPerQuadrant) {
-        double d = v - mean;
-        var += d * d;
-    }
-    var /= 4.0;
-    double balance = 1.0 - var / 2.0;
-    if (balance < 0.0) balance = 0.0;
-    if (balance > 1.0) balance = 1.0;
-    out.vowelBalance = balance;
-
-    // Q penalty if Q present and no U adjacent.
-    const auto &adj = adjacencyMasks();
-    int qCell = -1;
-    for (int i = 0; i < kBoardSize; ++i) if (board[i] == 'Q') { qCell = i; break; }
-    if (qCell >= 0) {
-        bool uAdj = false;
-        uint16_t s = adj[qCell];
-        while (s) {
-            int b = __builtin_ctz(s);
-            s &= s - 1;
-            if (board[b] == 'U') { uAdj = true; break; }
-        }
-        out.qPenalty = uAdj ? 0 : 50;
-    }
-
-    out.chaosPenalty = std::max(0, out.total - 220) * 0.5;
-    out.sparsePenalty = std::max(0, 50 - out.total) * 3.0;
-
-    double score = 1.0 * out.n3 + 3.0 * out.n4 + 6.0 * out.n5 + 8.0 * out.n6plus
-                 + 0.5 * out.straightBonus
-                 + 2.0 * out.bigramBonus
-                 + 15.0 * out.vowelBalance
-                 - out.qPenalty
-                 - out.chaosPenalty
-                 - out.sparsePenalty;
-    return score;
+    return sum;
 }
 
 std::array<uint8_t, kBoardSize> toBoardLetters(const std::array<char, kBoardSize> &letters) {
@@ -390,47 +384,60 @@ std::array<uint8_t, kBoardSize> toBoardLetters(const std::array<char, kBoardSize
     return out;
 }
 
+int64_t scoreCandidate(const std::array<char, kBoardSize> &letters,
+                       const Trie &trie,
+                       PathBuffer &buf,
+                       uint32_t &wordCountOut) {
+    enumerateAllPathMasks(toBoardLetters(letters), trie, buf);
+    wordCountOut = static_cast<uint32_t>(buf.dirty.size());
+    return computeOverlapScore(buf, trie);
+}
+
 constexpr std::array<char, 5> kVowelSet = {'A', 'E', 'I', 'O', 'U'};
 constexpr std::array<char, 10> kCommonConsonants = {'R', 'S', 'T', 'N', 'L', 'C', 'D', 'M', 'H', 'G'};
 
 } // namespace
 
-GoodBoardResult generateGoodBoard(uint64_t seed, const Trie &trie, Solver &solver) {
+int64_t overlapHeuristicScore(const std::array<uint8_t, kBoardSize> &board,
+                              const Trie &trie) {
+    PathBuffer buf;
+    enumerateAllPathMasks(board, trie, buf);
+    return computeOverlapScore(buf, trie);
+}
+
+GoodBoardResult generateGoodBoard(uint64_t seed, const Trie &trie) {
     Xoshiro256StarStar rng(seed);
 
     GoodBoardResult best{};
-    best.score = -1e18;
+    best.score = INT64_MIN;
     bool haveBest = false;
     uint32_t evaluated = 0;
+    PathBuffer buf;
 
     for (int attempt = 0; attempt < kCandidateCount; ++attempt) {
         auto cand = generateCandidate(rng);
         if (!prefilter(cand)) continue;
-        std::vector<SolverHit> hits = solver.solve(toBoardLetters(cand));
         evaluated++;
-        BoardSubscores sub;
-        double s = computeScore(cand, hits, sub);
+        uint32_t wc = 0;
+        int64_t s = scoreCandidate(cand, trie, buf, wc);
         if (!haveBest || s > best.score) {
             best.letters = cand;
             best.score = s;
-            best.subscores = sub;
+            best.wordCount = wc;
             haveBest = true;
         }
     }
 
     if (!haveBest) {
-        // Fallback: keep generating without the prefilter; use last candidate.
         auto cand = generateCandidate(rng);
-        std::vector<SolverHit> hits = solver.solve(toBoardLetters(cand));
-        BoardSubscores sub;
-        double s = computeScore(cand, hits, sub);
+        evaluated++;
+        uint32_t wc = 0;
+        int64_t s = scoreCandidate(cand, trie, buf, wc);
         best.letters = cand;
         best.score = s;
-        best.subscores = sub;
-        evaluated++;
+        best.wordCount = wc;
     }
 
-    // Hill-climb: try single-letter swaps on the best board.
     int extraSolves = 0;
     int accepted = 0;
     for (int cell = 0; cell < kBoardSize && extraSolves < kHillClimbMaxSolves
@@ -447,17 +454,16 @@ GoodBoardResult generateGoodBoard(uint64_t seed, const Trie &trie, Solver &solve
             auto trial = best.letters;
             trial[cell] = candLetter;
             if (!prefilter(trial)) continue;
-            std::vector<SolverHit> hits = solver.solve(toBoardLetters(trial));
             extraSolves++;
             evaluated++;
-            BoardSubscores sub;
-            double s = computeScore(trial, hits, sub);
+            uint32_t wc = 0;
+            int64_t s = scoreCandidate(trial, trie, buf, wc);
             if (s > best.score) {
                 best.letters = trial;
                 best.score = s;
-                best.subscores = sub;
+                best.wordCount = wc;
                 accepted++;
-                break; // restart cell scan for this cell's improved baseline
+                break;
             }
         }
     }

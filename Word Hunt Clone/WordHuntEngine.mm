@@ -64,11 +64,9 @@ NSString *stringFromWord(const std::string &word) {
 @interface WHGoodBoard ()
 
 - (instancetype)initWithLetters:(NSArray<NSString *> *)letters
-                  heuristicScore:(double)score
-                       subscores:(NSDictionary<NSString *, NSNumber *> *)subscores
+                  heuristicScore:(int64_t)score
              candidatesEvaluated:(NSUInteger)evaluated
                hillClimbAccepted:(NSUInteger)accepted
-                  solverMaxScore:(NSInteger)maxScore
                  solverWordCount:(NSInteger)wordCount;
 
 @end
@@ -76,20 +74,16 @@ NSString *stringFromWord(const std::string &word) {
 @implementation WHGoodBoard
 
 - (instancetype)initWithLetters:(NSArray<NSString *> *)letters
-                  heuristicScore:(double)score
-                       subscores:(NSDictionary<NSString *, NSNumber *> *)subscores
+                  heuristicScore:(int64_t)score
              candidatesEvaluated:(NSUInteger)evaluated
                hillClimbAccepted:(NSUInteger)accepted
-                  solverMaxScore:(NSInteger)maxScore
                  solverWordCount:(NSInteger)wordCount {
     self = [super init];
     if (self) {
         _letters = [letters copy];
         _heuristicScore = score;
-        _subscores = [subscores copy];
         _candidatesEvaluated = evaluated;
         _hillClimbAccepted = accepted;
-        _solverMaxScore = maxScore;
         _solverWordCount = wordCount;
     }
     return self;
@@ -248,7 +242,7 @@ NSString *stringFromWord(const std::string &word) {
 }
 
 - (WHGoodBoard *)generateGoodBoardWithSeed:(uint64_t)seed {
-    wh::GoodBoardResult result = wh::generateGoodBoard(seed, *_trie, *_solver);
+    wh::GoodBoardResult result = wh::generateGoodBoard(seed, *_trie);
 
     NSMutableArray<NSString *> *letters = [NSMutableArray arrayWithCapacity:wh::kBoardSize];
     for (int i = 0; i < wh::kBoardSize; ++i) {
@@ -256,42 +250,19 @@ NSString *stringFromWord(const std::string &word) {
         [letters addObject:[[NSString alloc] initWithBytes:&c length:1 encoding:NSASCIIStringEncoding]];
     }
 
-    const auto &s = result.subscores;
-    NSMutableDictionary<NSString *, NSNumber *> *sub = [NSMutableDictionary dictionary];
-    sub[@"n3"] = @(s.n3);
-    sub[@"n4"] = @(s.n4);
-    sub[@"n5"] = @(s.n5);
-    sub[@"n6plus"] = @(s.n6plus);
-    sub[@"total"] = @(s.total);
-    sub[@"straightBonus"] = @(s.straightBonus);
-    sub[@"bigramBonus"] = @(s.bigramBonus);
-    sub[@"vowelBalance"] = @(s.vowelBalance);
-    sub[@"qPenalty"] = @(s.qPenalty);
-    sub[@"chaosPenalty"] = @(s.chaosPenalty);
-    sub[@"sparsePenalty"] = @(s.sparsePenalty);
-    sub[@"longestWord"] = @(s.longestWord);
-    sub[@"meanWordLength"] = @(s.meanWordLength);
-    sub[@"turn0"] = @(s.turnHistogram[0]);
-    sub[@"turn1"] = @(s.turnHistogram[1]);
-    sub[@"turn2"] = @(s.turnHistogram[2]);
-    sub[@"turn3plus"] = @(s.turnHistogram[3]);
-    for (int q = 0; q < 4; ++q) {
-        sub[[NSString stringWithFormat:@"vowelsQ%d", q]] = @(s.vowelsPerQuadrant[q]);
-    }
-    for (int li = 0; li < 26; ++li) {
-        if (s.letterCounts[li] > 0) {
-            char buf[2] = { static_cast<char>('A' + li), 0 };
-            sub[[NSString stringWithFormat:@"count_%s", buf]] = @(s.letterCounts[li]);
-        }
-    }
-
     return [[WHGoodBoard alloc] initWithLetters:letters
                                   heuristicScore:result.score
-                                       subscores:sub
                              candidatesEvaluated:result.candidatesEvaluated
                                hillClimbAccepted:result.hillClimbAccepted
-                                  solverMaxScore:s.solverMaxScore
-                                 solverWordCount:s.solverWordCount];
+                                 solverWordCount:static_cast<NSInteger>(result.wordCount)];
+}
+
+- (int64_t)overlapHeuristicScoreForBoard:(NSArray<NSString *> *)board {
+    std::array<uint8_t, wh::kBoardSize> normalizedBoard{};
+    if (!boardFromArray(board, normalizedBoard)) {
+        return 0;
+    }
+    return wh::overlapHeuristicScore(normalizedBoard, *_trie);
 }
 
 - (NSArray<WHWordResult *> *)solveBoard:(NSArray<NSString *> *)board {

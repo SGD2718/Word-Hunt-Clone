@@ -4,12 +4,8 @@ namespace wh {
 
 int scoreForLength(std::size_t length) {
     if (length < 3) return 0;
-    switch (length) {
-        case 3: return 100;
-        case 4: return 400;
-        case 5: return 800;
-        default: return 1400 + 400 * (static_cast<int>(length) - 6);
-    }
+    auto length32 = static_cast<int>(length);
+    return std::max(100, 400 * (length32 - 3) + 200 * (length32 >= 6));
 }
 
 bool normalizeAscii(const char *utf8, std::string &out) {

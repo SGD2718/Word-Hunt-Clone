@@ -3,11 +3,9 @@ import Foundation
 struct BoardRoundMetrics {
     let seed: UInt64
     let board: String
-    let heuristicScore: Double
-    let subscores: [String: Double]
+    let heuristicScore: Int64
     let candidatesEvaluated: Int
     let hillClimbAccepted: Int
-    let solverMaxScore: Int
     let solverWordCount: Int
     let playerScore: Int
     let playerWordCount: Int
@@ -21,10 +19,8 @@ struct BoardRoundMetrics {
             "seed": seed,
             "board": board,
             "heuristicScore": heuristicScore,
-            "subscores": subscores,
             "candidatesEvaluated": candidatesEvaluated,
             "hillClimbAccepted": hillClimbAccepted,
-            "solverMaxScore": solverMaxScore,
             "solverWordCount": solverWordCount,
             "playerScore": playerScore,
             "playerWordCount": playerWordCount,

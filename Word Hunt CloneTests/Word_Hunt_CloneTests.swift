@@ -68,7 +68,34 @@ final class Word_Hunt_CloneTests: XCTestCase {
             XCTAssertTrue(letter.unicodeScalars.first.map { CharacterSet.uppercaseLetters.contains($0) } ?? false)
         }
         XCTAssertGreaterThan(a.solverWordCount, 30, "Good board should be findable-rich")
-        XCTAssertNotNil(a.subscores["n3"])
+        XCTAssertGreaterThan(Int(a.heuristicScore), 0, "Overlap heuristic should be positive on a populated board")
+    }
+
+    func testOverlapHeuristicCountsSharedCellsSquared() {
+        // Diagonal: 3² + 4² = 25. Off-diagonal: shared 3 cells appears
+        // twice in the full matrix (M[CAT][CATS] + M[CATS][CAT]) = 2·9 = 18.
+        // Total = 43.
+        engine.loadWordsForTesting(["CAT", "CATS"])
+        let board = [
+            "C", "A", "X", "X",
+            "X", "T", "S", "X",
+            "X", "X", "X", "X",
+            "X", "X", "X", "X"
+        ]
+        XCTAssertEqual(engine.overlapHeuristicScore(board: board), 43)
+    }
+
+    func testOverlapHeuristicDisjointWordsHaveOnlyDiagonal() {
+        // CAT and DOG share no cells; off-diagonal is 0.
+        // Diagonal: 3² + 3² = 18.
+        engine.loadWordsForTesting(["CAT", "DOG"])
+        let board = [
+            "C", "A", "X", "X",
+            "X", "T", "X", "X",
+            "X", "X", "D", "O",
+            "X", "X", "X", "G"
+        ]
+        XCTAssertEqual(engine.overlapHeuristicScore(board: board), 18)
     }
 
     func testGoodBoardBeatsClassicOnFindableWordCount() throws {
