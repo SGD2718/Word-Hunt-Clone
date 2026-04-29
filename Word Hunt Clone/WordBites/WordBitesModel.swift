@@ -149,7 +149,7 @@ final class WordBitesModel: ObservableObject {
     }
 
     private static func buildPreparedDeal(seed: UInt64, engine: WBEngine, cols: Int) -> PreparedDeal {
-        let dealt = engine.dealBlocks(seed: seed)
+        let dealt = engine.dealGoodBlocks(seed: seed)
         let blocks: [WBBlockState] = dealt.map { info in
             WBBlockState(
                 shape: info.shape,

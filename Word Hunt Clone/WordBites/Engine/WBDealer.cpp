@@ -61,9 +61,7 @@ bool tryPlaceAll(std::vector<Block> &blocks, wh::Xoshiro256StarStar &rng) {
 
 } // namespace
 
-std::vector<Block> dealAndPlace(uint64_t seed) {
-    wh::Xoshiro256StarStar rng(seed);
-
+std::vector<Block> rollBlockSet(wh::Xoshiro256StarStar &rng) {
     std::array<uint8_t, 16> rolled{};
     for (int die = 0; die < 16; ++die) {
         char face = kDice[die][rng.nextBounded(6)];
@@ -100,7 +98,10 @@ std::vector<Block> dealAndPlace(uint64_t seed) {
         }
         blocks.push_back(b);
     }
+    return blocks;
+}
 
+bool placeBlocks(std::vector<Block> &blocks, wh::Xoshiro256StarStar &rng) {
     constexpr int kMaxRestarts = 32;
     for (int restart = 0; restart < kMaxRestarts; ++restart) {
         for (Block &b : blocks) {
@@ -108,10 +109,15 @@ std::vector<Block> dealAndPlace(uint64_t seed) {
             b.col = -1;
             b.inTray = true;
         }
-        if (tryPlaceAll(blocks, rng)) return blocks;
+        if (tryPlaceAll(blocks, rng)) return true;
     }
-    // Fallback: leave whatever placed; caller should still get a valid block list
-    // (any unplaced blocks remain inTray).
+    return false;
+}
+
+std::vector<Block> dealAndPlace(uint64_t seed) {
+    wh::Xoshiro256StarStar rng(seed);
+    std::vector<Block> blocks = rollBlockSet(rng);
+    placeBlocks(blocks, rng);
     return blocks;
 }
 

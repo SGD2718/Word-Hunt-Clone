@@ -106,6 +106,66 @@ final class WordBitesEngineTests: XCTestCase {
         }
     }
 
+    func testDealGoodBlocksDeterministicAndPlaced() {
+        // Load a richer dictionary so the directional-overlap heuristic has
+        // something to chew on. Seed is irrelevant for correctness; we only
+        // assert determinism + placement validity.
+        hunt.loadWordsForTesting([
+            "CAT", "CATS", "BAT", "BATS", "RAT", "RATS", "SAT",
+            "TAR", "TARS", "STAR", "STARS", "ART", "ARTS", "ARC",
+            "EAR", "EARS", "EAT", "EATS", "TEA", "TEAS", "SEA",
+            "SET", "SETS", "TEN", "TENS", "NET", "NETS", "RED",
+            "BED", "BEDS", "TED", "TEAR", "TEARS", "ORE", "ORES",
+            "TOE", "TOES", "TON", "TONS", "ROT", "ROTS", "ROD",
+            "RODS", "ROAR", "ROARS", "REAR", "REARS", "ERE",
+        ])
+
+        let a = bites.dealGoodBlocks(seed: 7777)
+        let b = bites.dealGoodBlocks(seed: 7777)
+        XCTAssertEqual(a.count, bites.blockCount)
+        XCTAssertEqual(a.count, b.count)
+        for (x, y) in zip(a, b) {
+            XCTAssertEqual(x.shape, y.shape)
+            XCTAssertEqual(x.letterA, y.letterA)
+            XCTAssertEqual(x.letterB, y.letterB)
+            XCTAssertEqual(x.row, y.row)
+            XCTAssertEqual(x.col, y.col)
+        }
+
+        var occupied = Set<Int>()
+        for block in a {
+            XCTAssertFalse(block.inTray)
+            let cells = cellsCovered(block)
+            for cell in cells {
+                let idx = cell.row * bites.gridCols + cell.col
+                XCTAssertFalse(occupied.contains(idx))
+                for dr in -1...1 {
+                    for dc in -1...1 {
+                        let nr = cell.row + dr
+                        let nc = cell.col + dc
+                        if nr < 0 || nc < 0 || nr >= bites.gridRows || nc >= bites.gridCols { continue }
+                        let nidx = nr * bites.gridCols + nc
+                        if cells.contains(where: { $0.row == nr && $0.col == nc }) { continue }
+                        XCTAssertFalse(occupied.contains(nidx))
+                    }
+                }
+            }
+            for cell in cells {
+                occupied.insert(cell.row * bites.gridCols + cell.col)
+            }
+        }
+
+        // Block-set composition: 6 singles, 5 pairs, with at least one of each
+        // pair orientation (the prefilter rejects single-direction sets).
+        let singles = a.filter { $0.shape == .single }.count
+        let hPairs = a.filter { $0.shape == .horizontal }.count
+        let vPairs = a.filter { $0.shape == .vertical }.count
+        XCTAssertEqual(singles, 6)
+        XCTAssertEqual(hPairs + vPairs, 5)
+        XCTAssertGreaterThanOrEqual(hPairs, 1)
+        XCTAssertGreaterThanOrEqual(vPairs, 1)
+    }
+
     private func cellsCovered(_ block: WBBlockInfo) -> [(row: Int, col: Int)] {
         switch block.shape {
         case .single: return [(block.row, block.col)]

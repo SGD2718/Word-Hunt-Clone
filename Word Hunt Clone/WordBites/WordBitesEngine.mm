@@ -7,6 +7,7 @@
 
 #include "WBBlock.hpp"
 #include "WBDealer.hpp"
+#include "WBGoodBoardGen.hpp"
 #include "WBSolver.hpp"
 #include "WHTrie.hpp"
 
@@ -146,6 +147,20 @@ bool gridFromString(NSString *flat, wb::Grid &grid) {
         [result addObject:[[WBBlockInfo alloc] initWithBlock:b]];
     }
     return result;
+}
+
+- (NSArray<WBBlockInfo *> *)dealGoodBlocksWithSeed:(uint64_t)seed {
+    [self ensureSolver];
+    if (_trieRef == nullptr) {
+        // Trie not loaded — degrade to random deal so the game still starts.
+        return [self dealBlocksWithSeed:seed];
+    }
+    wb::GoodBlocksResult result = wb::generateGoodBlocks(seed, *_trieRef);
+    NSMutableArray<WBBlockInfo *> *out = [NSMutableArray arrayWithCapacity:result.blocks.size()];
+    for (const wb::Block &b : result.blocks) {
+        [out addObject:[[WBBlockInfo alloc] initWithBlock:b]];
+    }
+    return out;
 }
 
 - (NSArray<WBWordHit *> *)convertHits:(const std::vector<wb::WordHit> &)hits {

@@ -44,6 +44,10 @@ typedef NS_ENUM(NSInteger, WBShape) {
 
 - (NSArray<WBBlockInfo *> *)dealBlocksWithSeed:(uint64_t)seed NS_SWIFT_NAME(dealBlocks(seed:));
 
+// Like dealBlocks(seed:), but selects the highest-scoring candidate block set
+// from a directional letter-overlap heuristic before placing.
+- (NSArray<WBBlockInfo *> *)dealGoodBlocksWithSeed:(uint64_t)seed NS_SWIFT_NAME(dealGoodBlocks(seed:));
+
 // flatGrid: NSString of cols*rows characters, 'A'..'Z' or ' ' for empty cells.
 - (NSArray<WBWordHit *> *)findWordsInGrid:(NSString *)flatGrid NS_SWIFT_NAME(findWords(grid:));
 
