@@ -93,17 +93,15 @@ bool prefilter(const std::vector<Block> &blocks) {
     // tiles snowball -ER/-ERS neighbor pairs).
     int distinct = 0;
     for (int n : counts) if (n > 0) distinct++;
-    if (distinct < 11) return false;
+    if (distinct < 10) return false;
 
-    // Require a minimum number of *common* consonants (B C D F G H L M N P
-    // R S T W Y) so the board isn't carried by a single super-letter.
     static constexpr uint8_t kCommon[] = {
         'B'-'A','C'-'A','D'-'A','F'-'A','G'-'A','H'-'A','L'-'A','M'-'A',
         'N'-'A','P'-'A','R'-'A','S'-'A','T'-'A','W'-'A','Y'-'A'
     };
     int distinctCommon = 0;
     for (uint8_t l : kCommon) if (counts[l] > 0) distinctCommon++;
-    if (distinctCommon < 7) return false;
+    if (distinctCommon < 6) return false;
 
     return true;
 }
@@ -132,77 +130,122 @@ char drawWeighted(const std::array<WeightedLetter, N> &pool,
     return pool[N - 1].letter;
 }
 
-// Draw 16 letters from the weighted pools (independent of Boggle dice) and
-// partition them into 6 singles + 5 pairs with random orientations. Avoids
-// the dice-imposed duplication problem (e.g. the {'A','A','E','E','G','N'}
-// die rolls A or E 4/6 of the time).
+// Pair letters are sampled from a curated bigram pool rather than as two
+// independent letter draws. This deliberately concentrates pair tiles on
+// chain-friendly bigrams (CK for -ack/-ock, NG for -ingle/-angle, ER for
+// -er/-ers, etc.) which under independent-letter sampling appear far too
+// rarely (P(C)*P(K) ~ 0.002 per pair).
+struct WeightedBigram { char a, b; int weight; };
+
+constexpr std::array<WeightedBigram, 22> kBigramPool = {{
+    {'E','R', 9},  // -er / -ers chains
+    {'I','N', 7},  // -in- inserts, -ing chains
+    {'N','G', 7},  // -ing, -ingle, -angle
+    {'C','K', 6},  // -ack, -ock, -ick chains
+    {'L','E', 6},  // -ngle, -mble, -ple endings
+    {'E','D', 6},  // past tense
+    {'S','T', 5},  // st- prefix
+    {'A','T', 5},  // -at- many words
+    {'O','N', 5},  // -on- many
+    {'A','N', 5},  // -an-
+    {'T','H', 4},  // th- prefix
+    {'C','H', 4},  // ch- prefix
+    {'S','H', 4},  // sh- prefix
+    {'R','E', 4},  // re- prefix
+    {'E','S', 4},  // -es plurals
+    {'A','L', 4},  // -al
+    {'O','R', 4},  // -or
+    {'L','Y', 3},  // -ly adverbs
+    {'A','R', 3},  // -ar
+    {'O','U', 3},  // -ou-
+    {'I','T', 3},  // -it-
+    {'E','L', 3},  // -el-
+}};
+
+WeightedBigram drawWeightedBigram(wh::Xoshiro256StarStar &rng) {
+    int total = 0;
+    for (const auto &e : kBigramPool) total += e.weight;
+    uint32_t roll = rng.nextBounded(static_cast<uint32_t>(total));
+    int acc = 0;
+    for (const auto &e : kBigramPool) {
+        acc += e.weight;
+        if (static_cast<uint32_t>(acc) > roll) return e;
+    }
+    return kBigramPool.back();
+}
+
 std::vector<Block> rollWeightedBlocks(wh::Xoshiro256StarStar &rng) {
-    int vowelCount = 5 + static_cast<int>(rng.nextBounded(2)); // 5 or 6
+    std::vector<Block> blocks;
+    blocks.reserve(kBlockCount);
     std::array<int, 26> drawn{};
-    std::array<uint8_t, 16> letters{};
+    int vowelsUsed = 0;
 
-    for (int i = 0; i < vowelCount; ++i) {
+    // 5 pairs: each from the bigram pool, random orientation.
+    for (int i = 0; i < kPairCount; ++i) {
+        WeightedBigram bg = drawWeightedBigram(rng);
+        Block b;
+        b.shape = (rng.next() & 1ull) ? Shape::horizontal : Shape::vertical;
+        b.letterA = static_cast<uint8_t>(bg.a - 'A');
+        b.letterB = static_cast<uint8_t>(bg.b - 'A');
+        if (isVowelLetter(b.letterA)) vowelsUsed++;
+        if (isVowelLetter(b.letterB)) vowelsUsed++;
+        drawn[b.letterA]++;
+        drawn[b.letterB]++;
+        blocks.push_back(b);
+    }
+    // Convention: singles before pairs. Reorder later; for now just append
+    // singles to the end, then partition.
+    int singlesEmitted = 0;
+    auto appendSingle = [&](uint8_t letter) {
+        Block b;
+        b.shape = Shape::single;
+        b.letterA = letter;
+        // Insert at front of singles section so final order is singles, pairs.
+        blocks.insert(blocks.begin() + singlesEmitted, b);
+        singlesEmitted++;
+        drawn[letter]++;
+    };
+
+    int vowelTarget = 5 + static_cast<int>(rng.nextBounded(2)); // 5 or 6 total
+    int vowelSingles = vowelTarget - vowelsUsed;
+    if (vowelSingles < 0) vowelSingles = 0;
+    if (vowelSingles > kSingleCount) vowelSingles = kSingleCount;
+    int consSingles = kSingleCount - vowelSingles;
+
+    for (int i = 0; i < vowelSingles; ++i) {
         char c = drawWeighted(kVowelWeights, rng, drawn, false);
-        letters[i] = static_cast<uint8_t>(c - 'A');
-        drawn[c - 'A']++;
+        appendSingle(static_cast<uint8_t>(c - 'A'));
     }
-    for (int i = vowelCount; i < 16; ++i) {
+    for (int i = 0; i < consSingles; ++i) {
         char c = drawWeighted(kConsonantWeights, rng, drawn, true);
-        letters[i] = static_cast<uint8_t>(c - 'A');
-        drawn[c - 'A']++;
+        appendSingle(static_cast<uint8_t>(c - 'A'));
     }
 
-    // Q->U: ensure a U exists if Q was drawn.
+    // Q->U fixup: if a Q is anywhere in the set and no U, swap a vowel single
+    // (or vowel half of a pair) to U.
     bool hasQ = false, hasU = false;
-    for (uint8_t l : letters) {
-        if (l == ('Q' - 'A')) hasQ = true;
-        if (l == ('U' - 'A')) hasU = true;
+    for (const Block &b : blocks) {
+        if (b.letterA == ('Q' - 'A')) hasQ = true;
+        if (b.letterA == ('U' - 'A')) hasU = true;
+        if (b.shape != Shape::single) {
+            if (b.letterB == ('Q' - 'A')) hasQ = true;
+            if (b.letterB == ('U' - 'A')) hasU = true;
+        }
     }
     if (hasQ && !hasU) {
-        for (int i = 0; i < 16; ++i) {
-            uint8_t l = letters[i];
-            if (isVowelLetter(l) && l != ('U' - 'A')) {
-                letters[i] = static_cast<uint8_t>('U' - 'A');
+        for (Block &b : blocks) {
+            if (b.shape == Shape::single
+                && isVowelLetter(b.letterA)
+                && b.letterA != ('U' - 'A')) {
+                drawn[b.letterA]--;
+                b.letterA = static_cast<uint8_t>('U' - 'A');
+                drawn[b.letterA]++;
+                hasU = true;
                 break;
             }
         }
     }
 
-    // Shuffle so the position-based assignment to singles/pairs is unbiased
-    // by draw order (vowels were front-loaded above).
-    for (int i = 15; i > 0; --i) {
-        uint32_t j = rng.nextBounded(static_cast<uint32_t>(i + 1));
-        std::swap(letters[i], letters[static_cast<int>(j)]);
-    }
-
-    std::vector<Block> blocks;
-    blocks.reserve(kBlockCount);
-    for (int i = 0; i < kSingleCount; ++i) {
-        Block b;
-        b.shape = Shape::single;
-        b.letterA = letters[i];
-        blocks.push_back(b);
-    }
-    for (int i = 0; i < kPairCount; ++i) {
-        Block b;
-        b.shape = (rng.next() & 1ull) ? Shape::horizontal : Shape::vertical;
-        b.letterA = letters[kSingleCount + i * 2];
-        b.letterB = letters[kSingleCount + i * 2 + 1];
-        // A pair's two letters must differ. Try swapping letterB with a
-        // single's letter; fall back to bumping if none differ.
-        if (b.letterA == b.letterB) {
-            for (int j = 0; j < kSingleCount; ++j) {
-                if (blocks[j].letterA != b.letterA) {
-                    std::swap(blocks[j].letterA, b.letterB);
-                    break;
-                }
-            }
-        }
-        if (b.letterA == b.letterB) {
-            b.letterB = static_cast<uint8_t>((b.letterA + 1) % 26);
-        }
-        blocks.push_back(b);
-    }
     return blocks;
 }
 
