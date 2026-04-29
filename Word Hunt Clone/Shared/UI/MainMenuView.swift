@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainMenuView: View {
     @EnvironmentObject var router: AppRouter
+    @State private var showingSettings = false
 
     var body: some View {
         ZStack {
@@ -52,6 +53,29 @@ struct MainMenuView: View {
 
                 Spacer(minLength: 0)
             }
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
+                            showingSettings = true
+                        }
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .padding(12)
+                            .background(.white.opacity(0.12), in: Circle())
+                    }
+                    .padding(.top, 8)
+                    .padding(.trailing, 16)
+                }
+                Spacer()
+            }
+
+            SettingsOverlay(isPresented: $showingSettings)
+                .zIndex(3)
         }
     }
 }
