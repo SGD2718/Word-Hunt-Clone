@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftUI
 import UIKit
 
 final class WordBitesModel: ObservableObject {
@@ -57,6 +58,12 @@ final class WordBitesModel: ObservableObject {
     @Published var showingAbout = false
     @Published var showingWords = false
     @Published var showingAllWords = false
+    @Published var showingSettings = false
+
+    @AppStorage("boardGenerationMode") private var boardModeRaw: String = BoardGenerationMode.good.rawValue
+    private var boardMode: BoardGenerationMode {
+        BoardGenerationMode(rawValue: boardModeRaw) ?? .good
+    }
 
     private let engine: WBEngine
     private let huntEngine: WHWordHuntEngine
@@ -97,6 +104,7 @@ final class WordBitesModel: ObservableObject {
 
     private struct PreparedDeal {
         let seed: UInt64
+        let mode: BoardGenerationMode
         let blocks: [WBBlockState]
         let preExistingWords: Set<String>
     }
@@ -115,6 +123,10 @@ final class WordBitesModel: ObservableObject {
         // Use a pre-generated deal if one's ready. Defer the swap until the
         // start overlay finishes sliding up so the board changeover happens
         // behind a fully-covered screen.
+        // Discard cached deal if mode changed since it was built.
+        if let prepared = preparedDeal, prepared.mode != boardMode {
+            preparedDeal = nil
+        }
         if requestedSeed == nil, let prepared = preparedDeal {
             preparedDeal = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -128,9 +140,11 @@ final class WordBitesModel: ObservableObject {
         let nextSeed = requestedSeed ?? UInt64(Date().timeIntervalSince1970 * 1000)
         isGeneratingBoard = true
         let engineRef = engine
+        let mode = boardMode
         DispatchQueue.global(qos: .userInitiated).async {
             let prepared = WordBitesModel.buildPreparedDeal(
                 seed: nextSeed,
+                mode: mode,
                 engine: engineRef,
                 cols: 8
             )
@@ -148,8 +162,12 @@ final class WordBitesModel: ObservableObject {
         boardPulse += 1
     }
 
-    private static func buildPreparedDeal(seed: UInt64, engine: WBEngine, cols: Int) -> PreparedDeal {
-        let dealt = engine.dealGoodBlocks(seed: seed)
+    private static func buildPreparedDeal(seed: UInt64, mode: BoardGenerationMode, engine: WBEngine, cols: Int) -> PreparedDeal {
+        let dealt: [WBBlockInfo]
+        switch mode {
+        case .good: dealt = engine.dealGoodBlocks(seed: seed)
+        case .random: dealt = engine.dealBlocks(seed: seed)
+        }
         let blocks: [WBBlockState] = dealt.map { info in
             WBBlockState(
                 shape: info.shape,
@@ -170,7 +188,7 @@ final class WordBitesModel: ObservableObject {
         }
         let grid = String(chars)
         let preExisting = Set(engine.findWords(grid: grid).map { $0.word })
-        return PreparedDeal(seed: seed, blocks: blocks, preExistingWords: preExisting)
+        return PreparedDeal(seed: seed, mode: mode, blocks: blocks, preExistingWords: preExisting)
     }
 
     /// Generate the *next* deal off the main thread so New Game is instant.
@@ -179,8 +197,9 @@ final class WordBitesModel: ObservableObject {
         let nextSeed = UInt64(Date().timeIntervalSince1970 * 1000) &+ UInt64.random(in: 1...0xFFFF)
         let engineRef = engine
         let colsRef = cols
+        let mode = boardMode
         DispatchQueue.global(qos: .userInitiated).async {
-            let prepared = WordBitesModel.buildPreparedDeal(seed: nextSeed, engine: engineRef, cols: colsRef)
+            let prepared = WordBitesModel.buildPreparedDeal(seed: nextSeed, mode: mode, engine: engineRef, cols: colsRef)
             DispatchQueue.main.async { [weak self] in
                 self?.preparedDeal = prepared
             }

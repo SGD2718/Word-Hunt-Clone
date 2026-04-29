@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftUI
 import UIKit
 
 final class WordGameModel: ObservableObject {
@@ -49,6 +50,12 @@ final class WordGameModel: ObservableObject {
     @Published private(set) var releasedToasts: [WordToast] = []
     @Published var showingSolver = false
     @Published var showingAbout = false
+    @Published var showingSettings = false
+
+    @AppStorage("boardGenerationMode") private var boardModeRaw: String = BoardGenerationMode.good.rawValue
+    private var boardMode: BoardGenerationMode {
+        BoardGenerationMode(rawValue: boardModeRaw) ?? .good
+    }
 
     private var currentBoardMetrics: WHGoodBoard?
     private var roundStartedAt: Date?
@@ -95,7 +102,9 @@ final class WordGameModel: ObservableObject {
 
     private struct PreparedBoard {
         let seed: UInt64
-        let board: WHGoodBoard
+        let mode: BoardGenerationMode
+        let letters: [String]
+        let metrics: WHGoodBoard?
         let solved: [WHWordResult]
         let validWords: Set<String>
     }
@@ -118,6 +127,10 @@ final class WordGameModel: ObservableObject {
         // Prefer a pre-generated board from the previous round. Hold the swap
         // until the start overlay finishes its slide-up animation so the
         // board changeover happens behind a fully-covered screen.
+        // Discard cached prepared board if mode changed since it was built.
+        if let prepared = preparedBoard, prepared.mode != boardMode {
+            preparedBoard = nil
+        }
         if requestedSeed == nil, let prepared = preparedBoard {
             preparedBoard = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -136,23 +149,37 @@ final class WordGameModel: ObservableObject {
         isGeneratingBoard = true
 
         let engineRef = engine
+        let mode = boardMode
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = engineRef.generateGoodBoard(seed: nextSeed)
-            let solved = engineRef.solve(board: result.letters)
-            let validSet = Set(solved.map(\.word))
+            let prepared = WordGameModel.buildPreparedBoard(seed: nextSeed, mode: mode, engine: engineRef)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.applyPreparedBoard(PreparedBoard(
-                    seed: nextSeed, board: result, solved: solved, validWords: validSet
-                ))
+                self.applyPreparedBoard(prepared)
             }
         }
     }
 
+    private static func buildPreparedBoard(seed: UInt64, mode: BoardGenerationMode, engine: WHWordHuntEngine) -> PreparedBoard {
+        let letters: [String]
+        let metrics: WHGoodBoard?
+        switch mode {
+        case .good:
+            let result = engine.generateGoodBoard(seed: seed)
+            letters = result.letters
+            metrics = result
+        case .random:
+            letters = engine.generateBoard(seed: seed)
+            metrics = nil
+        }
+        let solved = engine.solve(board: letters)
+        let validSet = Set(solved.map(\.word))
+        return PreparedBoard(seed: seed, mode: mode, letters: letters, metrics: metrics, solved: solved, validWords: validSet)
+    }
+
     private func applyPreparedBoard(_ prepared: PreparedBoard) {
         seed = prepared.seed
-        board = prepared.board.letters
-        currentBoardMetrics = prepared.board
+        board = prepared.letters
+        currentBoardMetrics = prepared.metrics
         solvedWords = prepared.solved
         validWordSet = prepared.validWords
         isGeneratingBoard = false
@@ -165,15 +192,12 @@ final class WordGameModel: ObservableObject {
         guard preparedBoard == nil else { return }
         let nextSeed = UInt64(Date().timeIntervalSince1970 * 1000) &+ UInt64.random(in: 1...0xFFFF)
         let engineRef = engine
+        let mode = boardMode
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = engineRef.generateGoodBoard(seed: nextSeed)
-            let solved = engineRef.solve(board: result.letters)
-            let validSet = Set(solved.map(\.word))
+            let prepared = WordGameModel.buildPreparedBoard(seed: nextSeed, mode: mode, engine: engineRef)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.preparedBoard = PreparedBoard(
-                    seed: nextSeed, board: result, solved: solved, validWords: validSet
-                )
+                self.preparedBoard = prepared
             }
         }
     }

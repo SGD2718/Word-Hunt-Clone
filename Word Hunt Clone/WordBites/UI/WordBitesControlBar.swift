@@ -30,6 +30,15 @@ struct WordBitesControlBar: View {
                 Label("About", systemImage: "info.circle")
             }
             .buttonStyle(BitesButtonStyle(compact: true))
+
+            Button {
+                withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
+                    game.showingSettings = true
+                }
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .buttonStyle(BitesButtonStyle(compact: true))
         }
     }
 }
