@@ -64,7 +64,7 @@ struct WordChip: View {
                 .foregroundStyle(GameColors.toastInk)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(background, in: RoundedRectangle(cornerRadius: 12))
+                .background(background.opacity(0.88), in: RoundedRectangle(cornerRadius: 12))
                 .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)

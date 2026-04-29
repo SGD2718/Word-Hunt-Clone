@@ -1,4 +1,5 @@
 #import "WordHuntEngine.h"
+#import "WordHuntEngine+Internal.h"
 
 #include <array>
 #include <cstdint>
@@ -7,11 +8,11 @@
 #include <string>
 #include <vector>
 
-#include "Engine/WHBoardGen.hpp"
-#include "Engine/WHGoodBoardGen.hpp"
-#include "Engine/WHScoring.hpp"
-#include "Engine/WHSolver.hpp"
-#include "Engine/WHTrie.hpp"
+#include "WHBoardGen.hpp"
+#include "WHGoodBoardGen.hpp"
+#include "WHScoring.hpp"
+#include "WHSolver.hpp"
+#include "WHTrie.hpp"
 
 namespace {
 
@@ -344,6 +345,38 @@ NSString *stringFromWord(const std::string &word) {
         return 0;
     }
     return wh::scoreForLength(normalized.size());
+}
+
+- (const wh::Trie *)trieHandle {
+    return _trie.get();
+}
+
+- (NSArray<NSString *> *)wordsFormableFromLetters:(NSString *)letters maxLength:(NSInteger)maxLength {
+    int counts[26] = {0};
+    for (NSUInteger i = 0; i < letters.length; ++i) {
+        unichar ch = [letters characterAtIndex:i];
+        if (ch >= 'a' && ch <= 'z') ch = static_cast<unichar>(ch - 'a' + 'A');
+        if (ch >= 'A' && ch <= 'Z') {
+            counts[ch - 'A']++;
+        }
+    }
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    for (uint32_t id = 0; id < _trie->wordCount(); ++id) {
+        const std::string &w = _trie->word(id);
+        if (maxLength > 0 && static_cast<NSInteger>(w.size()) > maxLength) continue;
+        int needed[26] = {0};
+        bool ok = true;
+        for (char c : w) {
+            int i = c - 'A';
+            if (i < 0 || i >= 26) { ok = false; break; }
+            needed[i]++;
+            if (needed[i] > counts[i]) { ok = false; break; }
+        }
+        if (ok) {
+            [out addObject:stringFromWord(w)];
+        }
+    }
+    return out;
 }
 
 @end

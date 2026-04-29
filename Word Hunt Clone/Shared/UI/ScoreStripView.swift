@@ -28,7 +28,7 @@ struct ScoreCard: View {
         HStack(spacing: 10) {
             Circle()
                 .fill(Color.black)
-                .frame(width: 44, height: 44)
+                .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("WORDS: \(words)")
@@ -42,7 +42,7 @@ struct ScoreCard: View {
             .foregroundStyle(GameColors.ink)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .center)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 8))
         .shadow(color: .black.opacity(0.15), radius: 3, x: 0, y: 2)
@@ -66,7 +66,7 @@ struct TimerPill: View {
             .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill(urgent ? Color.red.opacity(0.85) : GameColors.boardInner.opacity(0.85))
+                    .fill(Color.black.opacity(0.5))
             )
     }
 }

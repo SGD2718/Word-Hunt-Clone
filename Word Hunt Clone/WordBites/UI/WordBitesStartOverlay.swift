@@ -1,20 +1,21 @@
 import SwiftUI
 
-struct StartOverlay: View {
-    @ObservedObject var game: WordGameModel
+struct WordBitesStartOverlay: View {
+    @ObservedObject var game: WordBitesModel
+    @EnvironmentObject var router: AppRouter
 
     var body: some View {
         ZStack {
-            GameColors.boardBackground
+            BlueGameColors.boardBackground
                 .ignoresSafeArea()
 
             VStack(spacing: 20) {
-                Text("WORD HUNT")
+                Text("WORD BITES")
                     .font(.system(size: 38, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 2)
 
-                Text("Connect adjacent letters to form words.\nFind as many as you can in 80 seconds.")
+                Text("Drag blocks onto the grid.\nLine up letters horizontally or vertically\nto form words. 80 seconds.")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.9))
                     .multilineTextAlignment(.center)
@@ -35,6 +36,20 @@ struct StartOverlay: View {
                 }
                 .disabled(game.isGeneratingBoard)
                 .opacity(game.isGeneratingBoard ? 0.6 : 1)
+
+                Button {
+                    router.goToMenu()
+                } label: {
+                    Text("Main Menu")
+                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 180)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.white.opacity(0.85), lineWidth: 2)
+                        )
+                }
             }
             .padding(28)
             .padding(.horizontal, 30)

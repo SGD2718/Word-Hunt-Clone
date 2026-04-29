@@ -52,14 +52,17 @@ struct ContentView: View {
 
                 if game.roundState == .preRound {
                     StartOverlay(game: game)
-                        .transition(.opacity)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(2)
                 }
 
                 if game.roundState == .ended {
                     GameOverOverlay(game: game)
-                        .transition(.opacity)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(2)
                 }
             }
+            .animation(.spring(response: 0.45, dampingFraction: 0.85), value: game.roundState)
             .toolbar(.hidden, for: .navigationBar)
             .onReceive(timer) { _ in
                 withAnimation(.linear(duration: 0.15)) {

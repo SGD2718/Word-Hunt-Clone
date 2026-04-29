@@ -58,6 +58,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSString *)wordForBoard:(NSArray<NSString *> *)board path:(NSArray<NSNumber *> *)path NS_SWIFT_NAME(word(board:path:));
 - (NSInteger)scoreForWord:(NSString *)word NS_SWIFT_NAME(score(word:));
 
+// Returns every dictionary word of length ≤ maxLength whose letter multiset is
+// a subset of the multiset in `letters`.
+- (NSArray<NSString *> *)wordsFormableFromLetters:(NSString *)letters
+                                         maxLength:(NSInteger)maxLength
+    NS_SWIFT_NAME(wordsFormable(fromLetters:maxLength:));
+
 @end
 
 NS_ASSUME_NONNULL_END

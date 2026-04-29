@@ -1,0 +1,144 @@
+import SwiftUI
+
+struct GameOverOverlay: View {
+    @ObservedObject var game: WordGameModel
+    @EnvironmentObject var router: AppRouter
+
+    private var rankedFound: [(word: String, score: Int)] {
+        let table = Dictionary(uniqueKeysWithValues: game.solvedWords.map { ($0.word, $0.score) })
+        return game.foundWords
+            .map { ($0, table[$0] ?? WHWordHuntEngine.shared().score(word: $0)) }
+            .sorted { lhs, rhs in
+                if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
+                if lhs.0.count != rhs.0.count { return lhs.0.count > rhs.0.count }
+                return lhs.0 < rhs.0
+            }
+    }
+
+    var body: some View {
+        ZStack {
+            GameColors.boardBackground
+                .ignoresSafeArea()
+
+            VStack(spacing: 10) {
+                ScoreCard(words: game.foundWords.count, score: game.score)
+
+                FoundWordsColumn(rows: rankedFound)
+                    .frame(maxHeight: .infinity)
+
+                VStack(spacing: 8) {
+                    Button {
+                        game.startNewGame()
+                    } label: {
+                        Text("NEW GAME")
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(GameColors.ink)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(GameColors.validNew, in: RoundedRectangle(cornerRadius: 10))
+                            .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 2)
+                    }
+
+                    Button {
+                        game.showingSolver = true
+                    } label: {
+                        Text("VIEW ALL WORDS")
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(GameColors.ink)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.white, in: RoundedRectangle(cornerRadius: 10))
+                            .shadow(color: .black.opacity(0.18), radius: 3, x: 0, y: 2)
+                    }
+
+                    Button {
+                        router.goToMenu()
+                    } label: {
+                        Text("MAIN MENU")
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.white.opacity(0.85), lineWidth: 2)
+                            )
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+            .frame(maxWidth: 380, maxHeight: .infinity)
+        }
+    }
+}
+
+private struct FoundWordsColumn: View {
+    let rows: [(word: String, score: Int)]
+
+    var body: some View {
+        Group {
+            if rows.isEmpty {
+                VStack {
+                    Spacer()
+                    Text("No words found")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.6))
+                    Spacer()
+                }
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 6) {
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            FoundWordRow(word: row.word, score: row.score)
+                        }
+                    }
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 14)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(GameColors.boardInner, in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+private struct FoundWordRow: View {
+    let word: String
+    let score: Int
+
+    var body: some View {
+        HStack {
+            WordTileLabel(word: word)
+            Spacer()
+            Text("\(score)")
+                .font(.system(size: 17, weight: .heavy))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+        }
+    }
+}
+
+struct WordTileLabel: View {
+    let word: String
+    var found: Bool = true
+
+    var body: some View {
+        let topColor = found ? GameColors.woodHighlight : Color(red: 0.92, green: 0.92, blue: 0.93)
+        let bottomColor = found ? GameColors.wood : Color(red: 0.78, green: 0.78, blue: 0.80)
+        Text(word)
+            .font(.system(size: 16, weight: .heavy))
+            .foregroundStyle(GameColors.ink)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                LinearGradient(
+                    colors: [topColor, bottomColor],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                in: RoundedRectangle(cornerRadius: 5)
+            )
+    }
+}

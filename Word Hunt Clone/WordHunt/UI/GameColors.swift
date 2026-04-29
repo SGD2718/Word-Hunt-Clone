@@ -6,8 +6,8 @@ enum GameColors {
     static let boardBorder = Color(red: 0.62, green: 0.80, blue: 0.55)
     static let boardInner = Color(red: 0.28, green: 0.45, blue: 0.28)
 
-    // Default wooden tile.
-    static let wood = Color(red: 0.93, green: 0.82, blue: 0.58)
+    // Default wooden tile (shared with Word Bites).
+    static let wood = Color(red: 0.86, green: 0.71, blue: 0.46)
     static let woodHighlight = Color(red: 0.99, green: 0.92, blue: 0.69)
 
     // Live-status tile fills.

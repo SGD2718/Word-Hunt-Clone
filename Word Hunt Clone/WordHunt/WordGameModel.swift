@@ -53,6 +53,10 @@ final class WordGameModel: ObservableObject {
     private var currentBoardMetrics: WHGoodBoard?
     private var roundStartedAt: Date?
     private var metricsLoggedForRound = false
+    // Set of all valid words findable on the current board, populated
+    // when board generation finishes. Word validity during play is
+    // membership in this set instead of a full-dictionary lookup.
+    private var validWordSet: Set<String> = []
 
     var currentWord: String {
         engine.word(board: board, path: selectedPath.map(NSNumber.init(value:)))
@@ -61,7 +65,7 @@ final class WordGameModel: ObservableObject {
     var liveStatus: LiveStatus {
         if selectedPath.isEmpty { return .empty }
         let word = currentWord
-        if word.count < 3 || !engine.contains(word: word) { return .invalid }
+        if word.count < 3 || !validWordSet.contains(word) { return .invalid }
         if foundWordSet.contains(word) { return .duplicate }
         return .acceptedNew
     }
@@ -89,34 +93,87 @@ final class WordGameModel: ObservableObject {
         }
     }
 
+    private struct PreparedBoard {
+        let seed: UInt64
+        let board: WHGoodBoard
+        let solved: [WHWordResult]
+        let validWords: Set<String>
+    }
+    private var preparedBoard: PreparedBoard?
+
     func startNewGame(seed requestedSeed: UInt64? = nil) {
         guard !isGeneratingBoard else { return }
-        let nextSeed = requestedSeed ?? UInt64(Date().timeIntervalSince1970 * 1000)
-        seed = nextSeed
         score = 0
         foundWords = []
         foundWordSet = []
         selectedPath = []
-        solvedWords = []
         isSolving = false
         showingSolver = false
-        currentBoardMetrics = nil
         metricsLoggedForRound = false
-        isGeneratingBoard = true
         remainingSeconds = roundLength
         releasedToasts = []
         roundState = .preRound
         lastHapticStatus = .empty
 
+        // Prefer a pre-generated board from the previous round. Hold the swap
+        // until the start overlay finishes its slide-up animation so the
+        // board changeover happens behind a fully-covered screen.
+        if requestedSeed == nil, let prepared = preparedBoard {
+            preparedBoard = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self else { return }
+                self.applyPreparedBoard(prepared)
+                self.scheduleNextBoard()
+            }
+            return
+        }
+
+        let nextSeed = requestedSeed ?? UInt64(Date().timeIntervalSince1970 * 1000)
+        seed = nextSeed
+        solvedWords = []
+        validWordSet = []
+        currentBoardMetrics = nil
+        isGeneratingBoard = true
+
         let engineRef = engine
         DispatchQueue.global(qos: .userInitiated).async {
             let result = engineRef.generateGoodBoard(seed: nextSeed)
+            let solved = engineRef.solve(board: result.letters)
+            let validSet = Set(solved.map(\.word))
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.board = result.letters
-                self.currentBoardMetrics = result
-                self.isGeneratingBoard = false
-                self.boardPulse += 1
+                self.applyPreparedBoard(PreparedBoard(
+                    seed: nextSeed, board: result, solved: solved, validWords: validSet
+                ))
+            }
+        }
+    }
+
+    private func applyPreparedBoard(_ prepared: PreparedBoard) {
+        seed = prepared.seed
+        board = prepared.board.letters
+        currentBoardMetrics = prepared.board
+        solvedWords = prepared.solved
+        validWordSet = prepared.validWords
+        isGeneratingBoard = false
+        boardPulse += 1
+    }
+
+    /// Generate the *next* board off the main thread. Called after a round
+    /// begins so it's ready instantly when the user taps New Game.
+    private func scheduleNextBoard() {
+        guard preparedBoard == nil else { return }
+        let nextSeed = UInt64(Date().timeIntervalSince1970 * 1000) &+ UInt64.random(in: 1...0xFFFF)
+        let engineRef = engine
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = engineRef.generateGoodBoard(seed: nextSeed)
+            let solved = engineRef.solve(board: result.letters)
+            let validSet = Set(solved.map(\.word))
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.preparedBoard = PreparedBoard(
+                    seed: nextSeed, board: result, solved: solved, validWords: validSet
+                )
             }
         }
     }
@@ -128,6 +185,8 @@ final class WordGameModel: ObservableObject {
         roundEndsAt = now.addingTimeInterval(TimeInterval(roundLength))
         roundStartedAt = now
         remainingSeconds = roundLength
+        // Pre-generate the next board so New Game is instant when this round ends.
+        scheduleNextBoard()
     }
 
     func tick() {
@@ -182,7 +241,7 @@ final class WordGameModel: ObservableObject {
         }
         guard roundState == .active, isPathValid else { return }
 
-        if word.count >= 3, engine.contains(word: word) {
+        if word.count >= 3, validWordSet.contains(word) {
             if foundWordSet.contains(word) {
                 spawnToast(text: word, status: .duplicate, score: 0)
             } else {
@@ -211,7 +270,9 @@ final class WordGameModel: ObservableObject {
     func revealSolver() {
         guard !isSolving else { return }
         isSolving = true
-        solvedWords = engine.solve(board: board)
+        if solvedWords.isEmpty {
+            solvedWords = engine.solve(board: board)
+        }
         isSolving = false
         roundState = .ended
         softImpact.impactOccurred(intensity: 0.9)

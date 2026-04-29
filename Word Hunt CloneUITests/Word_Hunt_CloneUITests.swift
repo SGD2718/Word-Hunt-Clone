@@ -23,9 +23,22 @@ final class Word_Hunt_CloneUITests: XCTestCase {
     }
 
     @MainActor
+    private func enterWordHunt(_ app: XCUIApplication) {
+        XCTAssertTrue(app.staticTexts["WORD GAMES"].waitForExistence(timeout: 5))
+        let huntCard = app.buttons.containing(NSPredicate(format: "label CONTAINS[c] 'Word Hunt'"))
+            .firstMatch
+        XCTAssertTrue(huntCard.waitForExistence(timeout: 3))
+        huntCard.tap()
+        if app.buttons["Start"].waitForExistence(timeout: 3) {
+            app.buttons["Start"].tap()
+        }
+    }
+
+    @MainActor
     func testGameScreenLaunches() throws {
         let app = XCUIApplication()
         app.launch()
+        enterWordHunt(app)
 
         XCTAssertTrue(app.buttons["New Game"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Reveal"].exists)
@@ -36,6 +49,7 @@ final class Word_Hunt_CloneUITests: XCTestCase {
     func testRevealOpensSolverReview() throws {
         let app = XCUIApplication()
         app.launch()
+        enterWordHunt(app)
 
         XCTAssertTrue(app.buttons["Reveal"].waitForExistence(timeout: 5))
         app.buttons["Reveal"].tap()
