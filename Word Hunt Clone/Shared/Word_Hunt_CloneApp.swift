@@ -23,14 +23,26 @@ struct RootView: View {
     @EnvironmentObject var router: AppRouter
 
     var body: some View {
-        switch router.screen {
-        case .menu:
+        ZStack {
+            // Menu sits at the back. It doesn't move; the game screen slides
+            // up over it when entering and slides down off the bottom when
+            // returning to the menu.
             MainMenuView()
-        case .wordHunt:
-            WordHuntScreen()
-        case .wordBites:
-            WordBitesScreen()
+
+            switch router.screen {
+            case .menu:
+                EmptyView()
+            case .wordHunt:
+                WordHuntScreen()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(1)
+            case .wordBites:
+                WordBitesScreen()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(1)
+            }
         }
+        .animation(.spring(response: 0.5, dampingFraction: 0.86), value: router.screen)
     }
 }
 
