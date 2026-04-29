@@ -58,7 +58,6 @@ final class WordBitesModel: ObservableObject {
     @Published var showingAbout = false
     @Published var showingWords = false
     @Published var showingAllWords = false
-    @Published var showingSettings = false
 
     @AppStorage("boardGenerationMode") private var boardModeRaw: String = BoardGenerationMode.good.rawValue
     private var boardMode: BoardGenerationMode {

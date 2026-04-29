@@ -50,7 +50,6 @@ final class WordGameModel: ObservableObject {
     @Published private(set) var releasedToasts: [WordToast] = []
     @Published var showingSolver = false
     @Published var showingAbout = false
-    @Published var showingSettings = false
 
     @AppStorage("boardGenerationMode") private var boardModeRaw: String = BoardGenerationMode.good.rawValue
     private var boardMode: BoardGenerationMode {

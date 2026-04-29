@@ -61,9 +61,6 @@ struct ContentView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .zIndex(2)
                 }
-
-                SettingsOverlay(isPresented: $game.showingSettings)
-                    .zIndex(3)
             }
             .animation(.spring(response: 0.45, dampingFraction: 0.85), value: game.roundState)
             .toolbar(.hidden, for: .navigationBar)
