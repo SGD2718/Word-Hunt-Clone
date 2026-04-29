@@ -13,6 +13,7 @@ struct GoodBlocksResult {
     std::vector<Block> blocks;
     int64_t score = 0;
     uint32_t candidatesEvaluated = 0;
+    uint32_t hillClimbAccepted = 0;
     uint32_t wordCount = 0;
 };
 

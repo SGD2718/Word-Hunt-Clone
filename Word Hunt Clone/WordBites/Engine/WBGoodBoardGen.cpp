@@ -14,10 +14,15 @@ namespace wb {
 
 namespace {
 
-constexpr int kCandidateCount = 80;
+constexpr int kCandidateCount = 240;
+constexpr int kHillClimbMaxAccepted = 16;
+constexpr int kHillClimbMaxTrials = 60;
 constexpr int kMaxScoredWordLength = 9; // bounded by kRows; H runs cap at kCols=8
 constexpr int kMaxDecompsPerWord = 4;
 constexpr int kMaxBlocksPerWord = kMaxScoredWordLength; // worst case: 9 singles
+
+constexpr std::array<char, 5> kVowelSet = {'A', 'E', 'I', 'O', 'U'};
+constexpr std::array<char, 10> kCommonConsonants = {'R', 'S', 'T', 'N', 'L', 'C', 'D', 'M', 'H', 'G'};
 
 constexpr uint8_t kDirH = 0;
 constexpr uint8_t kDirV = 1;
@@ -412,8 +417,80 @@ GoodBlocksResult generateGoodBlocks(uint64_t seed, const wh::Trie &trie) {
         evaluated++;
     }
 
+    // Hill climb on the chosen block set. Mutate one block at a time and keep
+    // the change if it improves the score. Block placement (row/col) doesn't
+    // affect the heuristic, so we mutate letters/shapes here and place once at
+    // the end.
+    int hillTrials = 0;
+    int hillAccepted = 0;
+    if (!trie.empty() && haveBest) {
+        auto tryCandidate = [&](Block original, std::size_t bi) -> bool {
+            if (!prefilter(best.blocks)) {
+                best.blocks[bi] = original;
+                return false;
+            }
+            hillTrials++;
+            uint32_t wc = 0;
+            int64_t s = scoreCandidate(best.blocks, trie, isFormable, decompCount,
+                                       decompsByWord, dirty, dedup, dedupDirty, wc);
+            evaluated++;
+            if (s > best.score) {
+                best.score = s;
+                best.wordCount = wc;
+                hillAccepted++;
+                return true;
+            }
+            best.blocks[bi] = original;
+            return false;
+        };
+
+        for (std::size_t bi = 0;
+             bi < best.blocks.size()
+                 && hillTrials < kHillClimbMaxTrials
+                 && hillAccepted < kHillClimbMaxAccepted;
+             ++bi) {
+            Block original = best.blocks[bi];
+
+            if (original.shape == Shape::single) {
+                bool isV = isVowelLetter(original.letterA);
+                const char *pool = isV ? kVowelSet.data() : kCommonConsonants.data();
+                int poolSize = isV ? static_cast<int>(kVowelSet.size())
+                                   : static_cast<int>(kCommonConsonants.size());
+                for (int p = 0; p < poolSize && hillTrials < kHillClimbMaxTrials; ++p) {
+                    uint8_t cand = static_cast<uint8_t>(pool[p] - 'A');
+                    if (cand == original.letterA) continue;
+                    best.blocks[bi].letterA = cand;
+                    if (tryCandidate(original, bi)) break;
+                }
+            } else {
+                // Pair: try flipping shape, then try replacing letterB with a
+                // common consonant. We don't touch letterA — it's set by the
+                // first die roll and tends to be the more "anchored" letter.
+                Shape origShape = original.shape;
+                best.blocks[bi].shape = (origShape == Shape::horizontal)
+                    ? Shape::vertical : Shape::horizontal;
+                bool acceptedFlip = tryCandidate(original, bi);
+
+                if (!acceptedFlip
+                    && hillTrials < kHillClimbMaxTrials
+                    && hillAccepted < kHillClimbMaxAccepted) {
+                    for (int p = 0;
+                         p < static_cast<int>(kCommonConsonants.size())
+                             && hillTrials < kHillClimbMaxTrials;
+                         ++p) {
+                        uint8_t cand = static_cast<uint8_t>(kCommonConsonants[p] - 'A');
+                        if (cand == original.letterB || cand == original.letterA) continue;
+                        best.blocks[bi].letterB = cand;
+                        if (tryCandidate(original, bi)) break;
+                    }
+                }
+            }
+        }
+    }
+
     placeBlocks(best.blocks, rng);
     best.candidatesEvaluated = evaluated;
+    best.hillClimbAccepted = static_cast<uint32_t>(hillAccepted);
     return best;
 }
 
