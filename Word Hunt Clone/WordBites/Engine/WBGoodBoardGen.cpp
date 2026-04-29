@@ -406,6 +406,7 @@ int64_t scoreCandidate(const std::vector<Block> &blocks,
                        std::vector<uint8_t> &isFormable,
                        std::vector<uint8_t> &decompCount,
                        std::vector<std::vector<Decomp>> &decompsByWord,
+                       std::vector<std::vector<uint32_t>> &neighborsByWord,
                        std::vector<uint32_t> &dirty,
                        std::vector<uint8_t> &dedup,
                        std::vector<uint32_t> &dedupDirty,
@@ -415,6 +416,7 @@ int64_t scoreCandidate(const std::vector<Block> &blocks,
         isFormable[id] = 0;
         decompCount[id] = 0;
         decompsByWord[id].clear();
+        neighborsByWord[id].clear();
     }
     dirty.clear();
 
@@ -452,67 +454,65 @@ int64_t scoreCandidate(const std::vector<Block> &blocks,
     wordCountOut = static_cast<uint32_t>(dirty.size());
 
     // For each formable word, collect distinct neighbor wordIDs and accumulate score.
-    int64_t total = 0;
+    // Pass 1: collect 1-hop neighbor IDs per formable word, deduped.
     std::vector<uint32_t> neighborScratch;
     neighborScratch.reserve(64);
-
     for (uint32_t wordID : dirty) {
-        const std::string &w = trie.word(wordID);
-        int len = static_cast<int>(w.size());
-        if (len > kMaxScoredWordLength) continue;
-        int64_t selfPts = wh::scoreForLength(static_cast<std::size_t>(len));
-
         neighborScratch.clear();
         for (const Decomp &d : decompsByWord[wordID]) {
             collectNeighbors(d, usableByDir[d.direction], trie, isFormable, neighborScratch);
         }
-
-        int64_t neighborSqSum = 0;
+        auto &out = neighborsByWord[wordID];
+        out.clear();
         for (uint32_t nid : neighborScratch) {
-            if (nid == wordID) continue;
-            if (dedup[nid]) continue;
+            if (nid == wordID || dedup[nid]) continue;
             dedup[nid] = 1;
             dedupDirty.push_back(nid);
-            const std::string &nw = trie.word(nid);
-            int nlen = static_cast<int>(nw.size());
-            int64_t npts = wh::scoreForLength(static_cast<std::size_t>(nlen));
-
-            // Discount trivial inflection neighbors (W <-> W+'S', W <-> W+'ES',
-            // W <-> W+'ED', W <-> W+'D', W <-> W+'ER', W <-> W+'ERS'). These
-            // are the snowball axes for the squared neighbor sum and they
-            // crowd out genuinely diverse fanout.
-            auto isSuffix = [](const std::string &shorter, const std::string &longer,
-                               const char *suffix, int suffixLen) {
-                if (static_cast<int>(longer.size())
-                    != static_cast<int>(shorter.size()) + suffixLen) return false;
-                if (!std::equal(shorter.begin(), shorter.end(), longer.begin())) return false;
-                for (int k = 0; k < suffixLen; ++k) {
-                    if (longer[shorter.size() + k] != suffix[k]) return false;
-                }
-                return true;
-            };
-            const std::string &shorter = (nlen < len) ? nw : w;
-            const std::string &longer  = (nlen < len) ? w : nw;
-            bool trivialInflection =
-                   isSuffix(shorter, longer, "S",   1)
-                || isSuffix(shorter, longer, "D",   1)
-                || isSuffix(shorter, longer, "ES",  2)
-                || isSuffix(shorter, longer, "ED",  2)
-                || isSuffix(shorter, longer, "ER",  2)
-                || isSuffix(shorter, longer, "ERS", 3)
-                || isSuffix(shorter, longer, "ING", 3);
-            // Multiplicative cross term: pts(W) * pts(N). Combined with the
-            // pts(W)^2 self term and symmetric neighbor relation, a connected
-            // component of words contributes ~(Σ pts)^2, so long-word chains
-            // explode quadratically while isolated long words stay bounded.
-            int64_t contribution = selfPts * npts;
-            if (trivialInflection) contribution /= 4;
-            neighborSqSum += contribution;
+            out.push_back(nid);
         }
         for (uint32_t nid : dedupDirty) dedup[nid] = 0;
         dedupDirty.clear();
+    }
 
-        total += selfPts * selfPts + neighborSqSum;
+    // Pass 2: score using both 1-hop and 2-hop reachability. The 2-hop term
+    // explicitly rewards "minimal modifications between chains" — a board
+    // where multiple word families reach each other in two block ops.
+    int64_t total = 0;
+    for (uint32_t wordID : dirty) {
+        int len = static_cast<int>(trie.word(wordID).size());
+        if (len > kMaxScoredWordLength) continue;
+        int64_t selfPts = wh::scoreForLength(static_cast<std::size_t>(len));
+
+        // Mark self so it can't be picked up as a neighbor of itself.
+        dedup[wordID] = 1;
+        dedupDirty.push_back(wordID);
+
+        int64_t crossSum = 0;
+        // 1-hop: full multiplicative cross term.
+        for (uint32_t n1 : neighborsByWord[wordID]) {
+            if (dedup[n1]) continue;
+            dedup[n1] = 1;
+            dedupDirty.push_back(n1);
+            int nlen = static_cast<int>(trie.word(n1).size());
+            int64_t npts = wh::scoreForLength(static_cast<std::size_t>(nlen));
+            crossSum += selfPts * npts;
+        }
+        // 2-hop: half weight, only for words not already reached in 1 hop.
+        for (uint32_t n1 : neighborsByWord[wordID]) {
+            for (uint32_t n2 : neighborsByWord[n1]) {
+                if (dedup[n2]) continue;
+                dedup[n2] = 1;
+                dedupDirty.push_back(n2);
+                int nlen = static_cast<int>(trie.word(n2).size());
+                int64_t npts = wh::scoreForLength(static_cast<std::size_t>(nlen));
+                crossSum += (selfPts * npts) / 2;
+            }
+        }
+
+        for (uint32_t nid : dedupDirty) dedup[nid] = 0;
+        dedupDirty.clear();
+
+        total += selfPts * selfPts + crossSum;
     }
 
     return total;
@@ -526,12 +526,13 @@ int64_t overlapHeuristicScore(const std::vector<Block> &blocks, const wh::Trie &
     std::vector<uint8_t> isFormable(wc, 0);
     std::vector<uint8_t> decompCount(wc, 0);
     std::vector<std::vector<Decomp>> decompsByWord(wc);
+    std::vector<std::vector<uint32_t>> neighborsByWord(wc);
     std::vector<uint32_t> dirty;
     std::vector<uint8_t> dedup(wc, 0);
     std::vector<uint32_t> dedupDirty;
     uint32_t out = 0;
     return scoreCandidate(blocks, trie, isFormable, decompCount, decompsByWord,
-                          dirty, dedup, dedupDirty, out);
+                          neighborsByWord, dirty, dedup, dedupDirty, out);
 }
 
 GoodBlocksResult generateGoodBlocks(uint64_t seed, const wh::Trie &trie) {
@@ -544,6 +545,7 @@ GoodBlocksResult generateGoodBlocks(uint64_t seed, const wh::Trie &trie) {
     std::vector<uint8_t> isFormable;
     std::vector<uint8_t> decompCount;
     std::vector<std::vector<Decomp>> decompsByWord;
+    std::vector<std::vector<uint32_t>> neighborsByWord;
     std::vector<uint32_t> dirty;
     std::vector<uint8_t> dedup;
     std::vector<uint32_t> dedupDirty;
@@ -552,6 +554,7 @@ GoodBlocksResult generateGoodBlocks(uint64_t seed, const wh::Trie &trie) {
         isFormable.assign(wc, 0);
         decompCount.assign(wc, 0);
         decompsByWord.assign(wc, {});
+        neighborsByWord.assign(wc, {});
         dedup.assign(wc, 0);
         dirty.reserve(2048);
         dedupDirty.reserve(64);
@@ -570,7 +573,8 @@ GoodBlocksResult generateGoodBlocks(uint64_t seed, const wh::Trie &trie) {
         evaluated++;
         uint32_t wc = 0;
         int64_t s = scoreCandidate(cand, trie, isFormable, decompCount,
-                                   decompsByWord, dirty, dedup, dedupDirty, wc);
+                                   decompsByWord, neighborsByWord,
+                                   dirty, dedup, dedupDirty, wc);
         if (!haveBest || s > best.score) {
             best.blocks = cand;
             best.score = s;
@@ -600,7 +604,8 @@ GoodBlocksResult generateGoodBlocks(uint64_t seed, const wh::Trie &trie) {
             hillTrials++;
             uint32_t wc = 0;
             int64_t s = scoreCandidate(best.blocks, trie, isFormable, decompCount,
-                                       decompsByWord, dirty, dedup, dedupDirty, wc);
+                                       decompsByWord, neighborsByWord,
+                                       dirty, dedup, dedupDirty, wc);
             evaluated++;
             if (s > best.score) {
                 best.score = s;
