@@ -14,10 +14,11 @@ namespace wb {
 
 namespace {
 
-constexpr int kCandidateCount = 800;
-constexpr int kHillClimbMaxPasses = 3;
-constexpr int kHillClimbMaxAccepted = 24;
-constexpr int kHillClimbMaxTrials = 120;
+constexpr int kCandidateCount = 1500;
+constexpr int kHillClimbMaxPasses = 5;
+constexpr int kHillClimbMaxAccepted = 40;
+constexpr int kHillClimbMaxTrials = 200;
+constexpr int kReachabilityHops = 3;
 constexpr int kMaxScoredWordLength = 9; // bounded by kRows; H runs cap at kCols=8
 constexpr int kMaxDecompsPerWord = 8;
 constexpr int kMaxBlocksPerWord = kMaxScoredWordLength; // worst case: 9 singles
@@ -474,39 +475,45 @@ int64_t scoreCandidate(const std::vector<Block> &blocks,
         dedupDirty.clear();
     }
 
-    // Pass 2: score using both 1-hop and 2-hop reachability. The 2-hop term
-    // explicitly rewards "minimal modifications between chains" — a board
-    // where multiple word families reach each other in two block ops.
+    // Pass 2: score by BFS over the neighbor graph up to kReachabilityHops.
+    // Each layer halves the contribution. Together with the symmetric pts(W)
+    // self term and the multiplicative cross term, boards with multiple word
+    // families bridged by 1-3 block ops score quadratically higher than
+    // boards with isolated chains.
+    std::vector<uint32_t> currentLayer;
+    std::vector<uint32_t> nextLayer;
+    currentLayer.reserve(64);
+    nextLayer.reserve(64);
+
     int64_t total = 0;
     for (uint32_t wordID : dirty) {
         int len = static_cast<int>(trie.word(wordID).size());
         if (len > kMaxScoredWordLength) continue;
         int64_t selfPts = wh::scoreForLength(static_cast<std::size_t>(len));
 
-        // Mark self so it can't be picked up as a neighbor of itself.
         dedup[wordID] = 1;
         dedupDirty.push_back(wordID);
+        currentLayer.clear();
+        currentLayer.push_back(wordID);
 
         int64_t crossSum = 0;
-        // 1-hop: full multiplicative cross term.
-        for (uint32_t n1 : neighborsByWord[wordID]) {
-            if (dedup[n1]) continue;
-            dedup[n1] = 1;
-            dedupDirty.push_back(n1);
-            int nlen = static_cast<int>(trie.word(n1).size());
-            int64_t npts = wh::scoreForLength(static_cast<std::size_t>(nlen));
-            crossSum += selfPts * npts;
-        }
-        // 2-hop: half weight, only for words not already reached in 1 hop.
-        for (uint32_t n1 : neighborsByWord[wordID]) {
-            for (uint32_t n2 : neighborsByWord[n1]) {
-                if (dedup[n2]) continue;
-                dedup[n2] = 1;
-                dedupDirty.push_back(n2);
-                int nlen = static_cast<int>(trie.word(n2).size());
-                int64_t npts = wh::scoreForLength(static_cast<std::size_t>(nlen));
-                crossSum += (selfPts * npts) / 2;
+        int64_t hopDivisor = 1;
+        for (int hop = 1; hop <= kReachabilityHops; ++hop) {
+            if (hop > 1) hopDivisor *= 2;
+            nextLayer.clear();
+            for (uint32_t cur : currentLayer) {
+                for (uint32_t n : neighborsByWord[cur]) {
+                    if (dedup[n]) continue;
+                    dedup[n] = 1;
+                    dedupDirty.push_back(n);
+                    nextLayer.push_back(n);
+                    int nlen = static_cast<int>(trie.word(n).size());
+                    int64_t npts = wh::scoreForLength(static_cast<std::size_t>(nlen));
+                    crossSum += (selfPts * npts) / hopDivisor;
+                }
             }
+            if (nextLayer.empty()) break;
+            std::swap(currentLayer, nextLayer);
         }
 
         for (uint32_t nid : dedupDirty) dedup[nid] = 0;
