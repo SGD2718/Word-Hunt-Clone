@@ -14,12 +14,12 @@ namespace wb {
 
 namespace {
 
-constexpr int kCandidateCount = 400;
+constexpr int kCandidateCount = 800;
 constexpr int kHillClimbMaxPasses = 3;
 constexpr int kHillClimbMaxAccepted = 24;
 constexpr int kHillClimbMaxTrials = 120;
 constexpr int kMaxScoredWordLength = 9; // bounded by kRows; H runs cap at kCols=8
-constexpr int kMaxDecompsPerWord = 4;
+constexpr int kMaxDecompsPerWord = 8;
 constexpr int kMaxBlocksPerWord = kMaxScoredWordLength; // worst case: 9 singles
 
 constexpr std::array<char, 5> kVowelSet = {'A', 'E', 'I', 'O', 'U'};
@@ -501,7 +501,11 @@ int64_t scoreCandidate(const std::vector<Block> &blocks,
                 || isSuffix(shorter, longer, "ER",  2)
                 || isSuffix(shorter, longer, "ERS", 3)
                 || isSuffix(shorter, longer, "ING", 3);
-            int64_t contribution = npts * npts;
+            // Multiplicative cross term: pts(W) * pts(N). Combined with the
+            // pts(W)^2 self term and symmetric neighbor relation, a connected
+            // component of words contributes ~(Σ pts)^2, so long-word chains
+            // explode quadratically while isolated long words stay bounded.
+            int64_t contribution = selfPts * npts;
             if (trivialInflection) contribution /= 4;
             neighborSqSum += contribution;
         }
