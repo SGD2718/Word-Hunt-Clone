@@ -233,6 +233,31 @@ void collectNeighbors(const Decomp &d,
             }
         }
     }
+
+    // Replacements: swap block i for an unused block u (same direction).
+    // u may have a different letter count than the block it replaces, so the
+    // result's length can differ.
+    for (int i = 0; i < d.blockCount; ++i) {
+        int dropStart = starts[i];
+        int dropEnd = starts[i + 1];
+        int afterDropLen = len - (dropEnd - dropStart);
+        for (std::size_t u = 0; u < usable.size(); ++u) {
+            if (used & static_cast<uint16_t>(1u << u)) continue;
+            const DirBlock &ub = usable[u];
+            int addLen = ub.letterCount();
+            int newLen = afterDropLen + addLen;
+            if (newLen < kMinWordLength || newLen > kMaxScoredWordLength) continue;
+            int p = 0;
+            for (int j = 0; j < dropStart; ++j) buf[p++] = letters[j];
+            buf[p++] = ub.letterA;
+            if (ub.isPair()) buf[p++] = ub.letterB;
+            for (int j = dropEnd; j < len; ++j) buf[p++] = letters[j];
+            uint32_t id = lookupTrie(trie, buf, newLen);
+            if (id != wh::kNoWord && id < isFormable.size() && isFormable[id]) {
+                neighborsOut.push_back(id);
+            }
+        }
+    }
 }
 
 int64_t scoreCandidate(const std::vector<Block> &blocks,
